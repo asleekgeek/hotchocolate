@@ -1,12 +1,17 @@
 using System.Buffers;
 using System.Text;
 using CookieCrumble.Formatters;
-using HotChocolate.Language;
+using CookieCrumble.Xunit;
 
 namespace CookieCrumble;
 
 public class SnapshotTests
 {
+    static SnapshotTests()
+    {
+        Snapshot.RegisterTestFramework(new XunitFramework());
+    }
+
     [Fact]
     public void MatchSnapshot()
     {
@@ -48,8 +53,8 @@ public class SnapshotTests
     {
         var snapshot = new Snapshot();
         snapshot.Add(new MyClass());
-        snapshot.Add(new MyClass { Foo = "Bar" });
-        snapshot.Add(new MyClass { Foo = "Baz" });
+        snapshot.Add(new MyClass { Foo = "Bar", });
+        snapshot.Add(new MyClass { Foo = "Baz", });
         snapshot.Match();
     }
 
@@ -58,8 +63,8 @@ public class SnapshotTests
     {
         var snapshot = new Snapshot();
         snapshot.Add(new MyClass());
-        snapshot.Add(new MyClass { Foo = "Bar" });
-        snapshot.Add(new MyClass { Foo = "Baz" });
+        snapshot.Add(new MyClass { Foo = "Bar", });
+        snapshot.Add(new MyClass { Foo = "Baz", });
         await snapshot.MatchAsync();
     }
 
@@ -68,8 +73,8 @@ public class SnapshotTests
     {
         var snapshot = new Snapshot();
         snapshot.Add(new MyClass());
-        snapshot.Add(new MyClass { Foo = "Bar" }, "Bar:");
-        snapshot.Add(new MyClass { Foo = "Baz" });
+        snapshot.Add(new MyClass { Foo = "Bar", }, "Bar:");
+        snapshot.Add(new MyClass { Foo = "Baz", });
         snapshot.Match();
     }
 
@@ -78,8 +83,8 @@ public class SnapshotTests
     {
         var snapshot = new Snapshot();
         snapshot.Add(new MyClass(), "Segment 1:");
-        snapshot.Add(new MyClass { Foo = "Bar" }, "Segment 2:");
-        snapshot.Add(new MyClass { Foo = "Baz" }, "Segment 3:");
+        snapshot.Add(new MyClass { Foo = "Bar", }, "Segment 2:");
+        snapshot.Add(new MyClass { Foo = "Baz", }, "Segment 3:");
         snapshot.Match();
     }
 
@@ -88,9 +93,9 @@ public class SnapshotTests
     {
         var snapshot = new Snapshot();
         snapshot.Add(new MyClass());
-        snapshot.Add(new MyClass { Foo = "Baz" }, "Bar:", new CustomSerializer());
-        snapshot.Add(new MyClass { Foo = "Baz" });
-        snapshot.Add(new MyClass { Foo = "Baz" });
+        snapshot.Add(new MyClass { Foo = "Baz", }, "Bar:", new CustomSerializer());
+        snapshot.Add(new MyClass { Foo = "Baz", });
+        snapshot.Add(new MyClass { Foo = "Baz", });
         snapshot.Match();
     }
 
@@ -100,16 +105,7 @@ public class SnapshotTests
         Snapshot.RegisterFormatter(new CustomSerializer());
 
         var snapshot = new Snapshot();
-        snapshot.Add(new MyClass { Foo = "123" });
-        snapshot.Match();
-    }
-
-    [Fact]
-    public void SnapshotBuilder_GraphQL_Segment()
-    {
-        var snapshot = new Snapshot();
-        snapshot.Add(new MyClass { Foo = "def" });
-        snapshot.Add(Utf8GraphQLParser.Parse("{ abc }"));
+        snapshot.Add(new MyClass { Foo = "123", });
         snapshot.Match();
     }
 
@@ -121,7 +117,7 @@ public class SnapshotTests
     public class CustomSerializer : ISnapshotValueFormatter
     {
         public bool CanHandle(object? value)
-            => value is MyClass { Foo: "123" };
+            => value is MyClass { Foo: "123", };
 
         public void Format(IBufferWriter<byte> snapshot, object? value)
         {

@@ -2,7 +2,6 @@ using HotChocolate.Language;
 using HotChocolate.Language.Visitors;
 using HotChocolate.Types.Introspection;
 using HotChocolate.Utilities;
-using Microsoft.Extensions.DependencyInjection;
 using static HotChocolate.Fusion.FusionDirectiveArgumentNames;
 using static HotChocolate.Fusion.FusionResources;
 using static HotChocolate.Fusion.Utilities.ThrowHelper;
@@ -13,8 +12,8 @@ namespace HotChocolate.Fusion.Metadata;
 internal sealed class FusionGraphConfigurationReader
 {
     private readonly Dictionary<string, ITypeNode> _emptyArgumentDefs = new();
-    private readonly HashSet<string> _assert = new();
-    private readonly HashSet<string> _subgraphNames = new();
+    private readonly HashSet<string> _assert = [];
+    private readonly HashSet<string> _subgraphNames = [];
     private readonly Dictionary<string, SubgraphInfo> _subgraphInfos = new();
 
     public FusionGraphConfiguration Read(string sourceText)
@@ -67,7 +66,7 @@ internal sealed class FusionGraphConfigurationReader
             }
         }
 
-        if (httpClientConfigs is not { Count: > 0 })
+        if (httpClientConfigs is not { Count: > 0, })
         {
             throw ServiceConfNoClientsSpecified();
         }
@@ -138,31 +137,38 @@ internal sealed class FusionGraphConfigurationReader
 
         foreach (var directiveNode in directiveNodes)
         {
-            if (directiveNode.Name.Value.EqualsOrdinal(typeNames.HttpDirective))
+            if (!directiveNode.Name.Value.EqualsOrdinal(typeNames.TransportDirective))
             {
-                configs.Add(ReadHttpClientConfig(typeNames, directiveNode));
+                continue;
+            }
+
+            var config = TryReadHttpClientConfig(typeNames, directiveNode);
+            if (config is not null)
+            {
+                configs.Add(config);
             }
         }
 
         return configs;
     }
 
-    private HttpClientConfiguration ReadHttpClientConfig(
+    private HttpClientConfiguration? TryReadHttpClientConfig(
         FusionTypeNames typeNames,
         DirectiveNode directiveNode)
     {
-        AssertName(directiveNode, typeNames.HttpDirective);
-        AssertArguments(directiveNode, OptionalArgs, SubgraphArg, BaseAddressArg);
+        AssertName(directiveNode, typeNames.TransportDirective);
+        AssertArguments(directiveNode, OptionalArgs, SubgraphArg, LocationArg, KindArg);
 
         string name = default!;
         string subgraph = default!;
         string baseAddress = default!;
+        string kind = default!;
 
         foreach (var argument in directiveNode.Arguments)
         {
             switch (argument.Name.Value)
             {
-                case ClientNameArg:
+                case ClientGroupArg:
                     name = Expect<StringValueNode>(argument.Value).Value;
                     break;
 
@@ -170,10 +176,19 @@ internal sealed class FusionGraphConfigurationReader
                     subgraph = Expect<StringValueNode>(argument.Value).Value;
                     break;
 
-                case BaseAddressArg:
+                case LocationArg:
                     baseAddress = Expect<StringValueNode>(argument.Value).Value;
                     break;
+
+                case KindArg:
+                    kind = Expect<StringValueNode>(argument.Value).Value;
+                    break;
             }
+        }
+
+        if (!kind.EqualsOrdinal("HTTP"))
+        {
+            return null;
         }
 
         if (string.IsNullOrEmpty(name))
@@ -185,7 +200,7 @@ internal sealed class FusionGraphConfigurationReader
 
         static void OptionalArgs(HashSet<string> assert)
         {
-            assert.Remove(ClientNameArg);
+            assert.Remove(ClientGroupArg);
         }
     }
 
@@ -197,31 +212,38 @@ internal sealed class FusionGraphConfigurationReader
 
         foreach (var directiveNode in directiveNodes)
         {
-            if (directiveNode.Name.Value.EqualsOrdinal(typeNames.WebSocketDirective))
+            if (!directiveNode.Name.Value.EqualsOrdinal(typeNames.TransportDirective))
             {
-                configs.Add(ReadWebSocketClientConfig(typeNames, directiveNode));
+                continue;
+            }
+
+            var config = TryReadWebSocketClientConfig(typeNames, directiveNode);
+            if (config is not null)
+            {
+                configs.Add(config);
             }
         }
 
         return configs;
     }
 
-    private WebSocketClientConfiguration ReadWebSocketClientConfig(
+    private WebSocketClientConfiguration? TryReadWebSocketClientConfig(
         FusionTypeNames typeNames,
         DirectiveNode directiveNode)
     {
-        AssertName(directiveNode, typeNames.WebSocketDirective);
-        AssertArguments(directiveNode, OptionalArgs, SubgraphArg, BaseAddressArg);
+        AssertName(directiveNode, typeNames.TransportDirective);
+        AssertArguments(directiveNode, OptionalArgs, SubgraphArg, LocationArg, KindArg);
 
         string name = default!;
         string subgraph = default!;
         string baseAddress = default!;
+        string kind = default!;
 
         foreach (var argument in directiveNode.Arguments)
         {
             switch (argument.Name.Value)
             {
-                case ClientNameArg:
+                case ClientGroupArg:
                     name = Expect<StringValueNode>(argument.Value).Value;
                     break;
 
@@ -229,10 +251,19 @@ internal sealed class FusionGraphConfigurationReader
                     subgraph = Expect<StringValueNode>(argument.Value).Value;
                     break;
 
-                case BaseAddressArg:
+                case LocationArg:
                     baseAddress = Expect<StringValueNode>(argument.Value).Value;
                     break;
+
+                case KindArg:
+                    kind = Expect<StringValueNode>(argument.Value).Value;
+                    break;
             }
+        }
+
+        if (!kind.EqualsOrdinal("WebSocket"))
+        {
+            return null;
         }
 
         if (string.IsNullOrEmpty(name))
@@ -244,7 +275,7 @@ internal sealed class FusionGraphConfigurationReader
 
         static void OptionalArgs(HashSet<string> assert)
         {
-            assert.Remove(ClientNameArg);
+            assert.Remove(ClientGroupArg);
         }
     }
 
@@ -287,6 +318,8 @@ internal sealed class FusionGraphConfigurationReader
                     break;
             }
         }
+
+        _subgraphNames.Add(subgraph);
 
         if(!_subgraphInfos.TryGetValue(subgraph, out var subgraphInfo))
         {
@@ -372,6 +405,8 @@ internal sealed class FusionGraphConfigurationReader
             }
         }
 
+        _subgraphNames.Add(schemaName);
+
         return new ArgumentVariableDefinition(name, schemaName, type, argumentName);
     }
 
@@ -404,6 +439,8 @@ internal sealed class FusionGraphConfigurationReader
             }
         }
 
+        _subgraphNames.Add(schemaName);
+
         return new FieldVariableDefinition(name, schemaName, select);
     }
 
@@ -417,7 +454,7 @@ internal sealed class FusionGraphConfigurationReader
         {
             if (directiveNode.Name.Value.EqualsOrdinal(typeNames.ResolverDirective))
             {
-                (definitions ??= new()).Add(ReadResolverDefinition(typeNames, directiveNode));
+                (definitions ??= []).Add(ReadResolverDefinition(typeNames, directiveNode));
             }
         }
 
@@ -453,12 +490,11 @@ internal sealed class FusionGraphConfigurationReader
                 case KindArg:
                     kind = Expect<StringValueNode>(argument.Value).Value switch
                     {
-                        FusionEnumValueNames.Query => ResolverKind.Query,
+                        FusionEnumValueNames.Fetch => ResolverKind.Query,
                         FusionEnumValueNames.Batch => ResolverKind.Batch,
-                        FusionEnumValueNames.BatchByKey => ResolverKind.BatchByKey,
-                        FusionEnumValueNames.Subscription => ResolverKind.Subscription,
+                        FusionEnumValueNames.Subscribe => ResolverKind.Subscribe,
                         _ => throw new InvalidOperationException(
-                            FusionGraphConfigurationReader_ReadResolverDefinition_InvalidKindValue)
+                            FusionGraphConfigurationReader_ReadResolverDefinition_InvalidKindValue),
                     };
                     break;
 
@@ -467,6 +503,8 @@ internal sealed class FusionGraphConfigurationReader
                     break;
             }
         }
+
+        _subgraphNames.Add(subgraph);
 
         FragmentSpreadNode? placeholder = null;
         _assert.Clear();
@@ -488,7 +526,7 @@ internal sealed class FusionGraphConfigurationReader
 
                     return SyntaxVisitor.Continue;
                 },
-                options: new() { VisitArguments = true })
+                options: new() { VisitArguments = true, })
             .Visit(select);
 
         return new ResolverDefinition(
@@ -496,9 +534,7 @@ internal sealed class FusionGraphConfigurationReader
             kind,
             select,
             placeholder,
-            _assert.Count == 0
-                ? Array.Empty<string>()
-                : _assert.ToArray(),
+            _assert.Count == 0 ? [] : _assert.ToArray(),
             arguments ?? _emptyArgumentDefs);
 
         static void OptionalArgs(HashSet<string> assert)
@@ -508,7 +544,7 @@ internal sealed class FusionGraphConfigurationReader
         }
     }
 
-    private Dictionary<string, ITypeNode>? ReadResolverArgumentDefinitions(
+    private static Dictionary<string, ITypeNode>? ReadResolverArgumentDefinitions(
         IValueNode argumentDefinitions)
     {
         if (argumentDefinitions is NullValueNode)
@@ -558,7 +594,7 @@ internal sealed class FusionGraphConfigurationReader
             if (directiveNode.Name.Value.EqualsOrdinal(typeNames.SourceDirective))
             {
                 var memberBinding = ReadMemberBinding(typeNames, directiveNode, annotatedMember);
-                (definitions ??= new()).Add(memberBinding);
+                (definitions ??= []).Add(memberBinding);
             }
         }
 

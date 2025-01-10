@@ -2,9 +2,10 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using HotChocolate.Execution.Processing;
 using HotChocolate.Fusion.Clients;
 using HotChocolate.Language;
-using static HotChocolate.Fusion.Execution.ExecutorUtils;
+using static HotChocolate.Fusion.Execution.ExecutionUtils;
 
 namespace HotChocolate.Fusion.Execution.Nodes;
 
@@ -57,7 +58,17 @@ internal sealed class ResolveByKeyBatch : ResolverNodeBase
         RequestState state,
         CancellationToken cancellationToken)
     {
-        if (state.TryGetState(SelectionSet, out var executionState))
+        if (CanBeSkipped(context))
+        {
+            return;
+        }
+
+        if (!state.TryGetState(SelectionSet, out var executionState))
+        {
+            return;
+        }
+
+        try
         {
             InitializeRequests(context, executionState);
 
@@ -75,7 +86,21 @@ internal sealed class ResolveByKeyBatch : ResolverNodeBase
             // for cleanup so that the memory can be released at the end of the execution.
             context.Result.RegisterForCleanup(response, ReturnResult);
 
-            ProcessResult(context, response, batchExecutionState);
+            // we need to lock the state before mutating it since there could be multiple
+            // query plan nodes be interested in it.
+            lock (executionState)
+            {
+                ProcessResult(context, response, batchExecutionState, SubgraphName);
+            }
+        }
+        catch (Exception ex)
+        {
+            context.DiagnosticEvents.ResolveByKeyBatchError(ex);
+
+            var errorHandler = context.ErrorHandler;
+            var error = errorHandler.CreateUnexpectedError(ex).Build();
+            error = errorHandler.Handle(error);
+            context.Result.AddError(error);
         }
     }
 
@@ -117,19 +142,49 @@ internal sealed class ResolveByKeyBatch : ResolverNodeBase
     private void ProcessResult(
         FusionExecutionContext context,
         GraphQLResponse response,
-        BatchExecutionState[] batchExecutionState)
+        BatchExecutionState[] batchExecutionState,
+        string subgraphName)
     {
-        ExtractErrors(context.Result, response.Errors, context.ShowDebugInfo);
         var result = UnwrapResult(response, Requires);
-
         ref var batchState = ref MemoryMarshal.GetArrayDataReference(batchExecutionState);
         ref var end = ref Unsafe.Add(ref batchState, batchExecutionState.Length);
+        var pathLength = Path.Length;
+        var first = true;
+
+        if (response.TransportException is not null)
+        {
+            foreach (var state in batchExecutionState)
+            {
+                CreateTransportErrors(
+                    response.TransportException,
+                    context.Result,
+                    context.ErrorHandler,
+                    state.SelectionSetResult,
+                    RootSelections,
+                    subgraphName,
+                    context.ShowDebugInfo);
+            }
+        }
 
         while (Unsafe.IsAddressLessThan(ref batchState, ref end))
         {
+            if (first)
+            {
+                ExtractErrors(
+                    context.Operation.Document,
+                    context.Operation.Definition,
+                    context.Result,
+                    context.ErrorHandler,
+                    response.Errors,
+                    batchState.SelectionSetResult,
+                    pathLength + 1,
+                    context.ShowDebugInfo);
+                first = false;
+            }
+
             if (result.TryGetValue(batchState.Key, out var data))
             {
-                ExtractSelectionResults(SelectionSet, SubgraphName, data, batchState.SelectionResults);
+                ExtractSelectionResults(SelectionSet, SubgraphName, data, batchState.SelectionSetData);
                 ExtractVariables(data, context.QueryPlan, SelectionSet, batchState.Requires, batchState.VariableValues);
             }
 
@@ -222,9 +277,11 @@ internal sealed class ResolveByKeyBatch : ResolverNodeBase
         if (exportKeys.Count == 1)
         {
             var key = exportKeys[0];
+
             foreach (var element in data.EnumerateArray())
             {
-                if (element.TryGetProperty(key, out var keyValue))
+                if (element.ValueKind is not JsonValueKind.Null &&
+                    element.TryGetProperty(key, out var keyValue))
                 {
                     result.TryAdd(FormatKeyValue(keyValue), element);
                 }
@@ -342,8 +399,8 @@ internal sealed class ResolveByKeyBatch : ResolverNodeBase
             StringValueNode value => value.Value,
             IntValueNode value => value.ToString(),
             FloatValueNode value => value.ToString(),
-            BooleanValueNode { Value: true } => "true",
-            BooleanValueNode { Value: false } => "false",
+            BooleanValueNode { Value: true, } => "true",
+            BooleanValueNode { Value: false, } => "false",
             NullValueNode => "null",
             _ => throw new NotSupportedException(),
         };
@@ -376,8 +433,17 @@ internal sealed class ResolveByKeyBatch : ResolverNodeBase
         public IReadOnlyList<string> Requires { get; } = executionState.Requires;
 
         /// <summary>
-        /// Gets the selection set data.
+        /// Gets the completed selection set result.
+        /// The selection set result represents the data for the
+        /// <see cref="ExecutionState.SelectionSet"/> that we deliver to the user.
         /// </summary>
-        public SelectionData[] SelectionResults { get; } = executionState.SelectionSetData;
+        public ObjectResult SelectionSetResult { get; } = executionState.SelectionSetResult;
+
+        /// <summary>
+        /// Gets the selection set data that was collected during execution.
+        /// The selection set data represents the data that we have collected
+        /// from the subgraphs for the <see cref="ExecutionState.SelectionSet"/>.
+        /// </summary>
+        public SelectionData[] SelectionSetData { get; } = executionState.SelectionSetData;
     }
 }

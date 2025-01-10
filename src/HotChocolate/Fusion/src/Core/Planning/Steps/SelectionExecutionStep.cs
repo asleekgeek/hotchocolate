@@ -33,7 +33,7 @@ internal sealed class SelectionExecutionStep : ExecutionStep
         string subgraphName,
         IObjectType selectionSet,
         ObjectTypeMetadata selectionSetTypeMetadata)
-        : this(id, subgraphName, null, selectionSet, selectionSetTypeMetadata)
+        : this(id, subgraphName, null, null, selectionSet, selectionSetTypeMetadata)
     {
     }
 
@@ -49,6 +49,9 @@ internal sealed class SelectionExecutionStep : ExecutionStep
     /// <param name="parentSelection">
     /// The parent selection of this execution step.
     /// </param>
+    /// <param name="parentSelectionPath">
+    /// The selection path from which this execution step was spawned.
+    /// </param>
     /// <param name="selectionSet">
     /// The selection set that is part of this execution step.
     /// </param>
@@ -59,17 +62,24 @@ internal sealed class SelectionExecutionStep : ExecutionStep
         int id,
         string subgraphName,
         ISelection? parentSelection,
+        SelectionPath? parentSelectionPath,
         IObjectType selectionSet,
         ObjectTypeMetadata selectionSetTypeMetadata)
         : base(id, parentSelection, selectionSet, selectionSetTypeMetadata)
     {
         SubgraphName = subgraphName;
+        ParentSelectionPath = parentSelectionPath;
     }
 
     /// <summary>
     /// Gets the subgraph from which this execution step will fetch data.
     /// </summary>
     public string SubgraphName { get; }
+
+    /// <summary>
+    /// Gets the selection path from which this execution step was spawned.
+    /// </summary>
+    public SelectionPath? ParentSelectionPath { get; }
 
     /// <summary>
     /// Gets the resolver for this execution step.
@@ -79,17 +89,17 @@ internal sealed class SelectionExecutionStep : ExecutionStep
     /// <summary>
     /// Gets the root selections of this execution step.
     /// </summary>
-    public List<RootSelection> RootSelections { get; } = new();
+    public List<RootSelection> RootSelections { get; } = [];
 
     /// <summary>
     /// Gets all selections that are part of this execution step.
     /// </summary>
-    public HashSet<ISelection> AllSelections { get; } = new();
+    public HashSet<ISelection> AllSelections { get; } = [];
 
     /// <summary>
     /// Gets all selection sets that are part of this execution step.
     /// </summary>
-    public HashSet<ISelectionSet> AllSelectionSets { get; } = new();
+    public HashSet<ISelectionSet> AllSelectionSets { get; } = [];
 
     /// <summary>
     /// Gets the selection resolvers.
@@ -110,7 +120,7 @@ internal sealed class SelectionExecutionStep : ExecutionStep
     /// <summary>
     /// The variable requirements by this task.
     /// </summary>
-    public HashSet<string> Requires { get; } = new();
+    public HashSet<string> Requires { get; } = [];
 
     private string GetDebuggerDisplay()
     {

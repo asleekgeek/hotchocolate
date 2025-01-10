@@ -10,7 +10,6 @@ internal class NodeEntityEnricher : IEntityEnricher
             null,
             new NameNode("id"),
             null,
-            null,
             Array.Empty<DirectiveNode>(),
             Array.Empty<ArgumentNode>(),
             null);
@@ -40,7 +39,7 @@ internal class NodeEntityEnricher : IEntityEnricher
         {
             if (schema.QueryType is not null &&
                 schema.QueryType.Fields.ContainsName("node") &&
-                schema.Types.TryGetType<InterfaceType>("Node", out var nodeType) &&
+                schema.Types.TryGetType<InterfaceTypeDefinition>("Node", out var nodeType) &&
                 type.Implements.Contains(nodeType))
             {
                 ResolveWithNode(entity, schema, type, entity.Name);
@@ -56,8 +55,8 @@ internal class NodeEntityEnricher : IEntityEnricher
 
     private static void ResolveWithNode(
         EntityGroup entity,
-        Schema sourceSchema,
-        ObjectType sourceType,
+        SchemaDefinition sourceSchema,
+        ObjectTypeDefinition sourceType,
         string targetName)
     {
         var arguments = new List<ArgumentNode>();
@@ -71,20 +70,19 @@ internal class NodeEntityEnricher : IEntityEnricher
             null,
             new NamedTypeNode(sourceType.Name),
             Array.Empty<DirectiveNode>(),
-            new SelectionSetNode(new[] { spread }));
+            new SelectionSetNode(new[] { spread, }));
 
         // Create a new FieldNode for the entity resolver
         var selection = new FieldNode(
             null,
             new NameNode("node"),
             null,
-            null,
             Array.Empty<DirectiveNode>(),
             arguments,
-            new SelectionSetNode(new[] { inlineFragment }));
+            new SelectionSetNode(new[] { inlineFragment, }));
 
         // Create a new SelectionSetNode for the entity resolver
-        var selectionSet = new SelectionSetNode(new[] { selection });
+        var selectionSet = new SelectionSetNode(new[] { selection, });
 
         // Create a new EntityResolver for the entity
         var resolver = new EntityResolver(
@@ -105,13 +103,13 @@ internal class NodeEntityEnricher : IEntityEnricher
                 _idVariable.WithVariable(varNode)));
 
         // Add the new EntityResolver to the entity metadata
-        entity.Metadata.EntityResolvers.Add(resolver);
+        entity.Metadata.EntityResolvers.TryAdd(resolver);
     }
 
     private static void ResolveWithNodes(
         EntityGroup entity,
-        Schema sourceSchema,
-        ObjectType sourceType,
+        SchemaDefinition sourceSchema,
+        ObjectTypeDefinition sourceType,
         string targetName)
     {
         var arguments = new List<ArgumentNode>();
@@ -125,24 +123,23 @@ internal class NodeEntityEnricher : IEntityEnricher
             null,
             new NamedTypeNode(sourceType.Name),
             Array.Empty<DirectiveNode>(),
-            new SelectionSetNode(new[] { spread }));
+            new SelectionSetNode(new[] { spread, }));
 
         // Create a new FieldNode for the entity resolver
         var selection = new FieldNode(
             null,
             new NameNode("nodes"),
             null,
-            null,
             Array.Empty<DirectiveNode>(),
             arguments,
-            new SelectionSetNode(new[] { inlineFragment }));
+            new SelectionSetNode(new[] { inlineFragment, }));
 
         // Create a new SelectionSetNode for the entity resolver
-        var selectionSet = new SelectionSetNode(new[] { selection });
+        var selectionSet = new SelectionSetNode(new[] { selection, });
 
         // Create a new EntityResolver for the entity
         var resolver = new EntityResolver(
-            EntityResolverKind.BatchWithKey,
+            EntityResolverKind.Batch,
             selectionSet,
             sourceType.Name,
             sourceSchema.Name);
@@ -159,6 +156,6 @@ internal class NodeEntityEnricher : IEntityEnricher
                 _idsVariable.WithVariable(varNode)));
 
         // Add the new EntityResolver to the entity metadata
-        entity.Metadata.EntityResolvers.Add(resolver);
+        entity.Metadata.EntityResolvers.TryAdd(resolver);
     }
 }

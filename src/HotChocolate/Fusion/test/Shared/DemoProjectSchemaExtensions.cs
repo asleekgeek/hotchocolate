@@ -9,7 +9,15 @@ public static class DemoProjectSchemaExtensions
           usersById(ids: [ID!]! @is(field: "id")): [User!]!
         }
         """;
-    
+
+    public const string AccountsExtensionWithCostSdl =
+        """
+        extend type Query {
+          userById(id: ID! @is(field: "id")): User! @cost(weight: "1.0")
+          usersById(ids: [ID!]! @is(field: "id")): [User!]!
+        }
+        """;
+
     public const string AccountsExtensionWithTagSdl =
         """
         extend type Query {
@@ -23,11 +31,11 @@ public static class DemoProjectSchemaExtensions
         }
 
         extend type User {
-          birthdate: DateTime! @tag(name: "internal")
+          birthdate: Date! @tag(name: "internal")
         }
 
         input AddUserInput {
-          birthdate: DateTime! @tag(name: "internal")
+          birthdate: Date! @tag(name: "internal")
           name: String!
           username: String!
         }
@@ -45,7 +53,20 @@ public static class DemoProjectSchemaExtensions
             @rename(coordinate: "Author", newName: "User") {
         }
         """;
-    
+
+    public const string ReviewsExtensionWithCostSdl =
+        """
+        extend type Query {
+          authorById(id: ID! @is(field: "id")): Author @cost(weight: "2.0")
+          productById(id: ID! @is(field: "id")): Product
+        }
+
+        schema
+            @rename(coordinate: "Query.authorById", newName: "userById")
+            @rename(coordinate: "Author", newName: "User") {
+        }
+        """;
+
     public const string ReviewsExtensionWithTagSdl =
         """
         extend type Query {
@@ -72,10 +93,38 @@ public static class DemoProjectSchemaExtensions
         }
         """;
 
+    public const string Reviews2ExtensionWithCostSdl =
+        """
+        extend type Query {
+          authorById(id: ID! @is(field: "id")): User @cost(weight: "2.0")
+          productById(id: ID! @is(field: "id")): Product @cost(weight: "1.0")
+        }
+
+        extend type User {
+            reviews: [Review!]! @listSize(assumedSize: 10)
+        }
+
+        schema
+            @rename(coordinate: "Query.authorById", newName: "userById") {
+        }
+
+        directive @listSize(
+            assumedSize: Int
+            slicingArguments: [String!]
+            slicingArgumentDefaultValue: Int
+            sizedFields: [String!]
+            requireOneSlicingArgument: Boolean! = true) on FIELD_DEFINITION
+        """;
+
     public const string ProductsExtensionSdl =
         """
         extend type Query {
           productById(id: ID! @is(field: "id")): Product
+        }
+
+        extend type User {
+            productConfigurationByUsername(username: String! @require(field: "username")): ProductConfiguration
+            productBookmarkByUsername(username: String! @require(field: "username")): ProductBookmark
         }
         """;
 

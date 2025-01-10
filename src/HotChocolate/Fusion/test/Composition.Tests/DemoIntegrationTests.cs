@@ -1,20 +1,13 @@
-using CookieCrumble;
 using HotChocolate.Fusion.Composition.Features;
 using HotChocolate.Fusion.Shared;
-using HotChocolate.Skimmed.Serialization;
 using Xunit.Abstractions;
 using static HotChocolate.Fusion.Shared.DemoProjectSchemaExtensions;
 
 namespace HotChocolate.Fusion.Composition;
 
-public sealed class DemoIntegrationTests
+public sealed class DemoIntegrationTests(ITestOutputHelper output)
 {
-    private readonly Func<ICompositionLog> _logFactory;
-
-    public DemoIntegrationTests(ITestOutputHelper output)
-    {
-        _logFactory = () => new TestCompositionLog(output);
-    }
+    private readonly Func<ICompositionLog> _logFactory = () => new TestCompositionLog(output);
 
     [Fact]
     public async Task Accounts_And_Reviews()
@@ -25,15 +18,47 @@ public sealed class DemoIntegrationTests
         var composer = new FusionGraphComposer(logFactory: _logFactory);
 
         var fusionConfig = await composer.ComposeAsync(
-            new[]
-            {
-                demoProject.Accounts.ToConfiguration(AccountsExtensionSdl),
-                demoProject.Reviews.ToConfiguration(ReviewsExtensionSdl),
-            });
+        [
+            demoProject.Accounts.ToConfiguration(AccountsExtensionSdl),
+            demoProject.Reviews.ToConfiguration(ReviewsExtensionSdl)
+        ]);
 
-        SchemaFormatter
-            .FormatAsString(fusionConfig)
-            .MatchSnapshot(extension: ".graphql");
+        fusionConfig.MatchSnapshot(extension: ".graphql");
+    }
+
+    [Fact]
+    public async Task Accounts_And_Reviews_With_Cost()
+    {
+        // arrange
+        using var demoProject = await DemoProject.CreateAsync(enableCost: true);
+
+        var composer = new FusionGraphComposer(logFactory: _logFactory);
+
+        var fusionConfig = await composer.ComposeAsync(
+        [
+            demoProject.Accounts.ToConfiguration(AccountsExtensionWithCostSdl),
+            demoProject.Reviews.ToConfiguration(ReviewsExtensionWithCostSdl)
+        ]);
+
+        fusionConfig.MatchSnapshot(extension: ".graphql");
+    }
+
+
+    [Fact]
+    public async Task Accounts_And_Reviews_Infer_Patterns()
+    {
+        // arrange
+        using var demoProject = await DemoProject.CreateAsync();
+
+        var composer = new FusionGraphComposer(logFactory: _logFactory);
+
+        var fusionConfig = await composer.ComposeAsync(
+        [
+            demoProject.Accounts.ToConfiguration(),
+            demoProject.Reviews.ToConfiguration(ReviewsExtensionSdl)
+        ]);
+
+        fusionConfig.MatchSnapshot(extension: ".graphql");
     }
 
     [Fact]
@@ -45,16 +70,13 @@ public sealed class DemoIntegrationTests
         var composer = new FusionGraphComposer(logFactory: _logFactory);
 
         var fusionConfig = await composer.ComposeAsync(
-            new[]
-            {
-                demoProject.Accounts.ToConfiguration(AccountsExtensionSdl),
-                demoProject.Reviews.ToConfiguration(ReviewsExtensionSdl),
-                demoProject.Products.ToConfiguration(ProductsExtensionSdl),
-            });
+        [
+            demoProject.Accounts.ToConfiguration(AccountsExtensionSdl),
+            demoProject.Reviews.ToConfiguration(ReviewsExtensionSdl),
+            demoProject.Products.ToConfiguration(ProductsExtensionSdl)
+        ]);
 
-        SchemaFormatter
-            .FormatAsString(fusionConfig)
-            .MatchSnapshot(extension: ".graphql");
+        fusionConfig.MatchSnapshot(extension: ".graphql");
     }
 
     [Fact]
@@ -66,17 +88,14 @@ public sealed class DemoIntegrationTests
         var composer = new FusionGraphComposer(logFactory: _logFactory);
 
         var fusionConfig = await composer.ComposeAsync(
-            new[]
-            {
+            [
                 demoProject.Accounts.ToConfiguration(AccountsExtensionSdl),
                 demoProject.Reviews.ToConfiguration(ReviewsExtensionSdl),
-                demoProject.Products.ToConfiguration(ProductsExtensionSdl),
-            },
+                demoProject.Products.ToConfiguration(ProductsExtensionSdl)
+            ],
             new FusionFeatureCollection(FusionFeatures.NodeField));
 
-        SchemaFormatter
-            .FormatAsString(fusionConfig)
-            .MatchSnapshot(extension: ".graphql");
+        fusionConfig.MatchSnapshot(extension: ".graphql");
     }
 
     [Fact]
@@ -88,17 +107,14 @@ public sealed class DemoIntegrationTests
         var composer = new FusionGraphComposer(logFactory: _logFactory);
 
         var fusionConfig = await composer.ComposeAsync(
-            new[]
-            {
+            [
                 demoProject.Accounts.ToConfiguration(AccountsExtensionSdl),
-                demoProject.Reviews2.ToConfiguration(ReviewsExtensionSdl),
-                demoProject.Products.ToConfiguration(ProductsExtensionSdl),
-            },
+                demoProject.Reviews2.ToConfiguration(Reviews2ExtensionSdl),
+                demoProject.Products.ToConfiguration(ProductsExtensionSdl)
+            ],
             new FusionFeatureCollection(FusionFeatures.NodeField));
 
-        SchemaFormatter
-            .FormatAsString(fusionConfig)
-            .MatchSnapshot(extension: ".graphql");
+        fusionConfig.MatchSnapshot(extension: ".graphql");
     }
 
     [Fact]
@@ -110,15 +126,113 @@ public sealed class DemoIntegrationTests
         var composer = new FusionGraphComposer(logFactory: _logFactory);
 
         var fusionConfig = await composer.ComposeAsync(
-            new[]
-            {
-                demoProject.Accounts.ToConfiguration(),
-                demoProject.Reviews.ToConfiguration(),
-                demoProject.Products.ToConfiguration(),
-            });
+        [
+            demoProject.Accounts.ToConfiguration(),
+            demoProject.Reviews.ToConfiguration(),
+            demoProject.Products.ToConfiguration()
+        ]);
 
-        SchemaFormatter
-            .FormatAsString(fusionConfig)
-            .MatchSnapshot(extension: ".graphql");
+        fusionConfig.MatchSnapshot(extension: ".graphql");
+    }
+
+    [Fact]
+    public async Task Compose_With_SourceSchema_Lib()
+    {
+        // arrange
+        using var demoProject = await DemoProject.CreateAsync();
+
+        var composer = new FusionGraphComposer(logFactory: _logFactory);
+
+        var fusionConfig = await composer.ComposeAsync(
+        [
+            demoProject.Accounts.ToConfiguration(),
+            demoProject.Reviews.ToConfiguration(),
+            demoProject.Products.ToConfiguration(),
+            demoProject.Shipping2.ToConfiguration()
+        ]);
+
+        fusionConfig.MatchSnapshot(extension: ".graphql");
+    }
+
+    [Fact]
+    public async Task User_Field_Is_Fully_Specified_Lookup()
+    {
+        // arrange
+        using var demoProject = await DemoProject.CreateAsync();
+
+        var composer = new FusionGraphComposer(logFactory: _logFactory);
+
+        var fusionConfig = await composer.ComposeAsync(
+        [
+            new SubgraphConfiguration(
+                "Schema1",
+                """
+                schema {
+                  query: Query
+                }
+
+                type Query {
+                  user(id: Int! @is(field: "id")): User @lookup
+                }
+
+                type User {
+                  id: Int!
+                  name: String!
+                  email: String!
+                  password: String!
+                }
+
+                """,
+                Array.Empty<string>(),
+                [
+                    new HttpClientConfiguration(
+                        new Uri("http://localhost:5000/graphql"),
+                        "Schema1")
+                ],
+                default)
+        ]);
+
+        fusionConfig.MatchSnapshot(extension: ".graphql");
+    }
+
+    [Fact]
+    public async Task User_Field__Lookup_Infers_Is_Directive()
+    {
+        // arrange
+        using var demoProject = await DemoProject.CreateAsync();
+
+        var composer = new FusionGraphComposer(logFactory: _logFactory);
+
+        var fusionConfig = await composer.ComposeAsync(
+        [
+            new SubgraphConfiguration(
+                "Schema1",
+                """
+                schema {
+                  query: Query
+                }
+
+                type Query {
+                  user(id: Int!): User @lookup
+                }
+
+                type User {
+                  id: Int!
+                  name: String!
+                  email: String!
+                  password: String!
+                }
+
+                """,
+                Array.Empty<string>(),
+                [
+                    new HttpClientConfiguration(
+                        new Uri("http://localhost:5000/graphql"),
+                        "Schema1")
+                ],
+                default)
+        ]);
+
+        fusionConfig.MatchSnapshot(extension: ".graphql");
     }
 }

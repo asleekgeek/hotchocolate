@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using StrawberryShake.CodeGeneration.CSharp.Extensions;
@@ -25,11 +23,15 @@ public class RazorSubscriptionGenerator : CSharpSyntaxGenerator<OperationDescrip
         var componentName = $"Use{descriptor.Name}";
         var resultType = descriptor.ResultTypeReference.GetRuntimeType().ToString();
 
+        var modifier = settings.AccessModifier == AccessModifier.Public
+            ? SyntaxKind.PublicKeyword
+            : SyntaxKind.InternalKeyword;
+
         var classDeclaration =
             ClassDeclaration(componentName)
                 .AddImplements(TypeNames.UseSubscription.WithGeneric(resultType))
                 .AddModifiers(
-                    Token(SyntaxKind.PublicKeyword),
+                    Token(modifier),
                     Token(SyntaxKind.PartialKeyword))
                 .AddGeneratedAttribute()
                 .AddMembers(CreateOperationProperty(descriptor.RuntimeType.ToString()));

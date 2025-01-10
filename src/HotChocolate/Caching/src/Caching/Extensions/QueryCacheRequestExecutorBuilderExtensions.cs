@@ -1,4 +1,3 @@
-using System;
 using HotChocolate;
 using HotChocolate.Caching;
 using HotChocolate.Execution.Configuration;
@@ -16,7 +15,7 @@ public static class QueryCacheRequestExecutorBuilderExtensions
     /// </param>
     public static IRequestExecutorBuilder UseQueryCache(
         this IRequestExecutorBuilder builder)
-        => builder.UseRequest<QueryCacheMiddleware>();
+        => builder.UseRequest(QueryCacheMiddleware.Create());
 
     /// <summary>
     /// Uses the default request pipeline including the
@@ -42,8 +41,8 @@ public static class QueryCacheRequestExecutorBuilderExtensions
             .UseDocumentParser()
             .UseDocumentValidation()
             .UseOperationCache()
-            .UseOperationComplexityAnalyzer()
             .UseOperationResolver()
+            .UseSkipWarmupExecution()
             .UseOperationVariableCoercion()
             .UseOperationExecution();
     }

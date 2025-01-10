@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using HotChocolate.Fusion.Clients;
-using static HotChocolate.Fusion.Execution.ExecutorUtils;
+using static HotChocolate.Fusion.Execution.ExecutionUtils;
 using static HotChocolate.Fusion.Execution.Nodes.ResolverNodeBase;
 
 namespace HotChocolate.Fusion.Execution.Nodes;
@@ -17,7 +17,6 @@ namespace HotChocolate.Fusion.Execution.Nodes;
 /// </param>
 internal sealed class Resolve(int id, Config config) : ResolverNodeBase(id, config)
 {
-
     /// <summary>
     /// Gets the kind of this node.
     /// </summary>
@@ -40,9 +39,19 @@ internal sealed class Resolve(int id, Config config) : ResolverNodeBase(id, conf
         RequestState state,
         CancellationToken cancellationToken)
     {
-        if (state.TryGetState(SelectionSet, out var executionState))
+        if (CanBeSkipped(context))
         {
-            var requests =  new SubgraphGraphQLRequest[executionState.Count];
+            return;
+        }
+
+        if (!state.TryGetState(SelectionSet, out var executionState))
+        {
+            return;
+        }
+
+        try
+        {
+            var requests = new SubgraphGraphQLRequest[executionState.Count];
 
             // first we will create request for all of our selection sets.
             InitializeRequests(context, executionState, requests);
@@ -57,7 +66,21 @@ internal sealed class Resolve(int id, Config config) : ResolverNodeBase(id, conf
             // but need to wait until the transport layer is finished and disposes the result.
             context.Result.RegisterForCleanup(responses, ReturnResults);
 
-            ProcessResponses(context, executionState, requests, responses, SubgraphName);
+            // we need to lock the state before mutating it since there could be multiple
+            // query plan nodes be interested in it.
+            lock (executionState)
+            {
+                ProcessResponses(context, executionState, requests, responses, SubgraphName);
+            }
+        }
+        catch (Exception ex)
+        {
+            context.DiagnosticEvents.ResolveError(ex);
+
+            var errorHandler = context.ErrorHandler;
+            var error = errorHandler.CreateUnexpectedError(ex).Build();
+            error = errorHandler.Handle(error);
+            context.Result.AddError(error);
         }
     }
 
@@ -114,20 +137,42 @@ internal sealed class Resolve(int id, Config config) : ResolverNodeBase(id, conf
         ref var request = ref MemoryMarshal.GetArrayDataReference(requests);
         ref var response = ref MemoryMarshal.GetArrayDataReference(responses);
         ref var end = ref Unsafe.Add(ref state, executionStates.Count);
+        var pathLength = Path.Length;
 
         while (Unsafe.IsAddressLessThan(ref state, ref end))
         {
             var data = UnwrapResult(response);
             var selectionSet = state.SelectionSet;
-            var selectionResults = state.SelectionSetData;
+            var selectionSetData = state.SelectionSetData;
+            var selectionSetResult = state.SelectionSetResult;
             var exportKeys = state.Requires;
             var variableValues = state.VariableValues;
 
-            ExtractErrors(context.Result, response.Errors, context.ShowDebugInfo);
+            if (response.TransportException is not null)
+            {
+                CreateTransportErrors(
+                    response.TransportException,
+                    context.Result,
+                    context.ErrorHandler,
+                    selectionSetResult,
+                    RootSelections,
+                    subgraphName,
+                    context.ShowDebugInfo);
+            }
+
+            ExtractErrors(
+                context.Operation.Document,
+                context.Operation.Definition,
+                context.Result,
+                context.ErrorHandler,
+                response.Errors,
+                selectionSetResult,
+                pathLength,
+                context.ShowDebugInfo);
 
             // we extract the selection data from the request and add it to the
             // workItem results.
-            ExtractSelectionResults(SelectionSet, subgraphName, data, selectionResults);
+            ExtractSelectionResults(SelectionSet, subgraphName, data, selectionSetData);
 
             // next we need to extract any variables that we need for followup requests.
             ExtractVariables(data, context.QueryPlan, selectionSet, exportKeys, variableValues);

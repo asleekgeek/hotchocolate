@@ -1,6 +1,5 @@
 using StrawberryShake.CodeGeneration.CSharp.Builders;
 using StrawberryShake.CodeGeneration.Descriptors;
-using StrawberryShake.CodeGeneration.Descriptors.Operations;
 using StrawberryShake.CodeGeneration.Utilities;
 
 namespace StrawberryShake.CodeGeneration.CSharp.Generators;
@@ -20,6 +19,7 @@ public class ClientInterfaceGenerator : ClassBaseGenerator<ClientDescriptor>
 
         var interfaceBuilder = InterfaceBuilder
             .New()
+            .SetAccessModifier(settings.AccessModifier)
             .SetName(fileName)
             .SetComment(descriptor.Documentation);
 

@@ -1,25 +1,27 @@
-// This static class provides extension methods to facilitate merging InputObject types
-// in a Fusion graph.
-
 using HotChocolate.Skimmed;
+using static HotChocolate.Fusion.Composition.MergeExtensions;
 
 namespace HotChocolate.Fusion.Composition;
 
+/// <summary>
+/// This static class provides extension methods to facilitate merging InputObject types in a Fusion graph.
+/// </summary>
 internal static class InputObjectMergeExtensions
 {
     // This extension method creates a new InputField instance by replacing any
     // named types in the source field's type with the equivalent type in the target
     // schema. This is used to create a new merged field in the target schema.
-    public static InputField CreateField(
+    public static InputFieldDefinition CreateField(
         this CompositionContext context,
-        InputField source,
-        Schema targetSchema)
+        InputFieldDefinition source,
+        SchemaDefinition targetSchema)
     {
         var targetFieldType = source.Type.ReplaceNameType(n => targetSchema.Types[n]);
-        var target = new InputField(source.Name, targetFieldType);
-        target.DeprecationReason = source.DeprecationReason;
-        target.IsDeprecated = source.IsDeprecated;
-        target.Description = source.Description;
+        var target = new InputFieldDefinition(source.Name, targetFieldType);
+        target.MergeDescriptionWith(source);
+        target.MergeDeprecationWith(source);
+        target.MergeDirectivesWith(source, context);
+        target.DefaultValue = source.DefaultValue;
         return target;
     }
 
@@ -30,19 +32,30 @@ internal static class InputObjectMergeExtensions
     // from the source to the target.
     public static void MergeField(
         this CompositionContext context,
-        InputField source,
-        InputField target)
+        InputObjectTypeDefinition type,
+        InputFieldDefinition source,
+        InputFieldDefinition target)
     {
-        if (!string.IsNullOrEmpty(source.Description) &&
-            string.IsNullOrEmpty(target.Description))
+        var mergedInputType = MergeInputType(source.Type, target.Type);
+
+        if (mergedInputType is null)
         {
-            target.Description = source.Description;
+            context.Log.Write(
+                LogEntryHelper.InputFieldTypeMismatch(
+                    new SchemaCoordinate(type.Name, source.Name),
+                    source,
+                    target.Type,
+                    source.Type));
+            return;
         }
 
-        if (source.IsDeprecated && string.IsNullOrEmpty(target.DeprecationReason))
+        if(!target.Type.Equals(mergedInputType, TypeComparison.Structural))
         {
-            target.DeprecationReason = source.DeprecationReason;
-            target.IsDeprecated = source.IsDeprecated;
+            target.Type = mergedInputType;
         }
+
+        target.MergeDescriptionWith(source);
+        target.MergeDeprecationWith(source);
+        target.MergeDirectivesWith(source, context);
     }
 }

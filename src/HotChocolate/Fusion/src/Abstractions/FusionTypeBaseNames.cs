@@ -36,19 +36,24 @@ internal static class FusionTypeBaseNames
     public static string ReEncodeIdDirective = "reEncodeId";
 
     /// <summary>
-    /// The base name of the HTTP directive.
+    /// The base name of the transport directive.
     /// </summary>
-    public const string HttpDirective = "httpClient";
-
-    /// <summary>
-    /// The base name of the HTTP directive.
-    /// </summary>
-    public const string WebSocketDirective = "webSocketClient";
+    public const string TransportDirective = "transport";
 
     /// <summary>
     /// The base name of the fusion directive.
     /// </summary>
     public const string FusionDirective = "fusion";
+
+    public const string InternalDirective = "internal";
+
+    public const string RenameDirective = "rename";
+
+    public const string RemoveDirective = "remove";
+
+    public const string LookupDirective = "lookup";
+
+    public const string RequireDirective = "require";
 
     /// <summary>
     /// The base name of the GraphQL selection directive.
@@ -85,4 +90,3 @@ internal static class FusionTypeBaseNames
     /// </summary>
     public const string ResolverKind = "ResolverKind";
 }
-
