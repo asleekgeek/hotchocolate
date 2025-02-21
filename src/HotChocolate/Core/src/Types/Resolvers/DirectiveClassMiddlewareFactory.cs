@@ -1,8 +1,5 @@
 #nullable enable
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using HotChocolate.Language;
@@ -34,7 +31,6 @@ internal static class DirectiveClassMiddlewareFactory
         var sync = new object();
         MiddlewareFactory<TMiddleware, IServiceProvider, FieldDelegate>? activate = null;
         ClassQueryDelegate<TMiddleware, IMiddlewareContext>? invoke = null;
-        TMiddleware? instance = null;
 
         return (next, directive) =>
         {
@@ -51,7 +47,7 @@ internal static class DirectiveClassMiddlewareFactory
                                 .CompileFactory<IServiceProvider, FieldDelegate>(
                                     (services, _) => new IParameterHandler[]
                                     {
-                                        directiveHandler, new ServiceParameterHandler(services)
+                                        directiveHandler, new ServiceParameterHandler(services),
                                     });
 
                         invoke =
@@ -61,11 +57,13 @@ internal static class DirectiveClassMiddlewareFactory
                                     {
                                         directiveHandler,
                                         new ServiceParameterHandler(
-                                            Expression.Property(context, _services))
+                                            Expression.Property(context, _services)),
                                     });
                     }
                 }
             }
+
+            TMiddleware? instance = null;
 
             return context =>
             {
@@ -78,7 +76,7 @@ internal static class DirectiveClassMiddlewareFactory
     internal static DirectiveMiddleware Create(Type middlewareType)
         => (DirectiveMiddleware)_createGeneric
             .MakeGenericMethod(middlewareType)
-            .Invoke(null, Array.Empty<object>())!;
+            .Invoke(null, [])!;
 
     internal static DirectiveMiddleware Create<TMiddleware>(
         Func<IServiceProvider, FieldDelegate, TMiddleware> activate)
@@ -86,7 +84,6 @@ internal static class DirectiveClassMiddlewareFactory
     {
         var sync = new object();
         ClassQueryDelegate<TMiddleware, IMiddlewareContext>? invoke = null;
-        TMiddleware? instance = null;
 
         return (next, directive) =>
         {
@@ -105,11 +102,13 @@ internal static class DirectiveClassMiddlewareFactory
                                     {
                                         directiveHandler,
                                         new ServiceParameterHandler(
-                                            Expression.Property(context, _services))
+                                            Expression.Property(context, _services)),
                                     });
                     }
                 }
             }
+
+            TMiddleware? instance = null;
 
             return context =>
             {

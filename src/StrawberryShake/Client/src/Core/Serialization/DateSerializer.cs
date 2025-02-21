@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
@@ -7,7 +6,7 @@ namespace StrawberryShake.Serialization;
 /// <summary>
 /// This serializer handles date scalars.
 /// </summary>
-public class DateSerializer : ScalarSerializer<string, DateTime>
+public class DateSerializer : ScalarSerializer<string, DateOnly>
 {
     private const string _dateFormat = "yyyy-MM-dd";
 
@@ -16,32 +15,31 @@ public class DateSerializer : ScalarSerializer<string, DateTime>
     {
     }
 
-    public override DateTime Parse(string serializedValue)
+    public override DateOnly Parse(string serializedValue)
     {
         if (TryDeserializeFromString(serializedValue, out var date))
         {
             return date.Value;
         }
 
-        throw ThrowHelper.DateTimeSerializer_InvalidFormat(serializedValue);
+        throw ThrowHelper.DateSerializer_InvalidFormat(serializedValue);
     }
 
-    protected override string Format(DateTime runtimeValue)
+    protected override string Format(DateOnly runtimeValue)
     {
-        return runtimeValue.Date.ToString(_dateFormat, CultureInfo.InvariantCulture);
+        return runtimeValue.ToString(_dateFormat, CultureInfo.InvariantCulture);
     }
 
     private static bool TryDeserializeFromString(
         string? serialized,
-        [NotNullWhen(true)] out DateTime? value)
+        [NotNullWhen(true)] out DateOnly? value)
     {
-        if (DateTime.TryParse(
+        if (DateOnly.TryParseExact(
             serialized,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeLocal,
-            out var dateTime))
+            _dateFormat,
+            out var date))
         {
-            value = dateTime.Date;
+            value = date;
             return true;
         }
 

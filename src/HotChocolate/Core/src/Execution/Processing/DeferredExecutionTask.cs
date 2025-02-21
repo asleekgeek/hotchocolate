@@ -1,5 +1,5 @@
 using System.Collections.Immutable;
-using System.Threading.Tasks;
+using HotChocolate.Utilities;
 using static HotChocolate.WellKnownContextData;
 
 namespace HotChocolate.Execution.Processing;
@@ -46,11 +46,20 @@ internal abstract class DeferredExecutionTask
             parentResultId = id;
         }
 
-        Task.Factory.StartNew(
-            () => ExecuteAsync(operationContextOwner, resultId, parentResultId, patchId),
-            default,
-            TaskCreationOptions.None,
-            TaskScheduler.Default);
+        var capturedContext = ExecutionContext.Capture();
+        if (capturedContext is null)
+        {
+            ExecuteAsync(operationContextOwner, resultId, parentResultId, patchId).FireAndForget();
+        }
+        else
+        {
+            var execute = () =>
+                ExecutionContext.Run(
+                    capturedContext,
+                    _ => ExecuteAsync(operationContextOwner, resultId, parentResultId, patchId),
+                    null);
+            execute.FireAndForget();
+        }
     }
 
     /// <summary>

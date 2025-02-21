@@ -322,3 +322,5 @@ conferences.db-wal
 
 .server/
 .nuke/
+.mono/
+packages.lock.json

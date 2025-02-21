@@ -1,4 +1,3 @@
-using System;
 using HotChocolate.Configuration;
 using HotChocolate.Language;
 using HotChocolate.Properties;
@@ -12,7 +11,7 @@ namespace HotChocolate.Types;
 /// <summary>
 /// Represents a field or directive argument.
 /// </summary>
-public class Argument : FieldBase<ArgumentDefinition>, IInputField
+public class Argument : FieldBase, IInputField
 {
     private Type _runtimeType = default!;
 
@@ -50,12 +49,6 @@ public class Argument : FieldBase<ArgumentDefinition>, IInputField
     }
 
     /// <summary>
-    /// The associated syntax node from the GraphQL SDL.
-    /// </summary>
-    public new InputValueDefinitionNode? SyntaxNode
-        => (InputValueDefinitionNode?)base.SyntaxNode;
-
-    /// <summary>
     /// Gets the type system member that declares this argument.
     /// </summary>
     public ITypeSystemMember DeclaringMember { get; private set; } = default!;
@@ -83,7 +76,13 @@ public class Argument : FieldBase<ArgumentDefinition>, IInputField
     /// </summary>
     internal bool IsOptional { get; private set; }
 
-    protected override void OnCompleteField(
+    protected sealed override void OnCompleteField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnCompleteField(context, declaringMember, (ArgumentDefinition)definition);
+
+    protected virtual void OnCompleteField(
         ITypeCompletionContext context,
         ITypeSystemMember declaringMember,
         ArgumentDefinition definition)
@@ -94,7 +93,7 @@ public class Argument : FieldBase<ArgumentDefinition>, IInputField
                 .SetMessage(TypeResources.Argument_TypeIsNull, definition.Name)
                 .SetTypeSystemObject(context.Type)
                 .SetExtension("declaringMember", declaringMember)
-                .SetExtension("name", definition.Name.ToString())
+                .SetExtension("name", definition.Name)
                 .Build());
             return;
         }
@@ -102,12 +101,50 @@ public class Argument : FieldBase<ArgumentDefinition>, IInputField
         base.OnCompleteField(context, declaringMember, definition);
 
         Type = context.GetType<IInputType>(definition.Type!).EnsureInputType();
-        _runtimeType = definition.RuntimeType ?? definition.Parameter?.ParameterType!;
+        _runtimeType = definition.GetRuntimeType()!;
         _runtimeType = CompleteRuntimeType(Type, _runtimeType, out var isOptional);
-        DefaultValue = CompleteDefaultValue(context, definition, Type, Coordinate);
         IsOptional = isOptional;
         DeclaringMember = declaringMember;
     }
+
+    protected sealed override void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnCompleteMetadata(context, declaringMember, (ArgumentDefinition)definition);
+
+    protected virtual void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        ArgumentDefinition definition)
+    {
+        DefaultValue = CompleteDefaultValue(context, definition, Type, Coordinate);
+        base.OnCompleteMetadata(context, declaringMember, definition);
+    }
+
+    protected sealed override void OnMakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnMakeExecutable(context, declaringMember, (ArgumentDefinition)definition);
+
+    protected virtual void OnMakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        ArgumentDefinition definition) =>
+        base.OnMakeExecutable(context, declaringMember, definition);
+
+    protected sealed override void OnFinalizeField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnFinalizeField(context, declaringMember, (ArgumentDefinition)definition);
+
+    protected virtual void OnFinalizeField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        ArgumentDefinition definition) =>
+        base.OnFinalizeField(context, declaringMember, definition);
 
     /// <summary>
     /// Returns a string that represents the current argument.

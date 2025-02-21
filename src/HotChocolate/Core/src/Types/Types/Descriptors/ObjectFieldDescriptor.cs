@@ -1,17 +1,16 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using HotChocolate.Execution;
 using HotChocolate.Internal;
 using HotChocolate.Language;
+using HotChocolate.Properties;
 using HotChocolate.Resolvers;
 using HotChocolate.Types.Descriptors.Definitions;
 using HotChocolate.Types.Helpers;
 using HotChocolate.Utilities;
 using static System.Reflection.BindingFlags;
-using static HotChocolate.Execution.ExecutionStrategy;
 using static HotChocolate.Properties.TypeResources;
+using static HotChocolate.WellKnownContextData;
 
 #nullable enable
 
@@ -19,10 +18,10 @@ namespace HotChocolate.Types.Descriptors;
 
 public class ObjectFieldDescriptor
     : OutputFieldDescriptorBase<ObjectFieldDefinition>
-    , IObjectFieldDescriptor
+        , IObjectFieldDescriptor
 {
     private bool _argumentsInitialized;
-    private ParameterInfo[] _parameterInfos = Array.Empty<ParameterInfo>();
+    private ParameterInfo[] _parameterInfos = [];
 
     /// <summary>
     /// Creates a new instance of <see cref="ObjectFieldDescriptor"/>
@@ -34,7 +33,8 @@ public class ObjectFieldDescriptor
     {
         Definition.Name = fieldName;
         Definition.ResultType = typeof(object);
-        Definition.IsParallelExecutable = context.Options.DefaultResolverStrategy is Parallel;
+        Definition.IsParallelExecutable =
+            context.Options.DefaultResolverStrategy is ExecutionStrategy.Parallel;
     }
 
     /// <summary>
@@ -56,7 +56,8 @@ public class ObjectFieldDescriptor
         Definition.ResolverType = resolverType == sourceType
             ? null
             : resolverType;
-        Definition.IsParallelExecutable = context.Options.DefaultResolverStrategy is Parallel;
+        Definition.IsParallelExecutable =
+            context.Options.DefaultResolverStrategy is ExecutionStrategy.Parallel;
 
         if (naming.IsDeprecated(member, out var reason))
         {
@@ -88,7 +89,8 @@ public class ObjectFieldDescriptor
         Definition.Expression = expression ?? throw new ArgumentNullException(nameof(expression));
         Definition.SourceType = sourceType;
         Definition.ResolverType = resolverType;
-        Definition.IsParallelExecutable = context.Options.DefaultResolverStrategy is Parallel;
+        Definition.IsParallelExecutable =
+            context.Options.DefaultResolverStrategy is ExecutionStrategy.Parallel;
 
         var member = expression.TryExtractCallMember();
 
@@ -136,6 +138,8 @@ public class ObjectFieldDescriptor
     /// <inheritdoc />
     protected override void OnCreateDefinition(ObjectFieldDefinition definition)
     {
+        Context.Descriptors.Push(this);
+
         var member = definition.ResolverMember ?? definition.Member;
 
         if (!Definition.AttributesAreApplied && member is not null)
@@ -148,12 +152,14 @@ public class ObjectFieldDescriptor
 
         CompleteArguments(definition);
 
-        if (!definition.HasStreamResult &&
-            definition.ResultType?.IsGenericType is true &&
-            definition.ResultType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>))
+        if (!definition.HasStreamResult
+            && definition.ResultType?.IsGenericType is true
+            && definition.ResultType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>))
         {
             definition.HasStreamResult = true;
         }
+
+        Context.Descriptors.Pop();
     }
 
     private void CompleteArguments(ObjectFieldDefinition definition)
@@ -209,17 +215,28 @@ public class ObjectFieldDescriptor
                     definition.Member,
                     _parameterInfos,
                     definition.GetParameterExpressionBuilders());
+
+                foreach (var parameter in _parameterInfos)
+                {
+                    if (!parameter.IsDefined(typeof(ParentAttribute)))
+                    {
+                        continue;
+                    }
+
+                    var requirements = parameter.GetCustomAttribute<ParentAttribute>()?.Requires;
+                    if (!(requirements?.Length > 0))
+                    {
+                        continue;
+                    }
+
+                    Definition.Flags |= FieldFlags.WithRequirements;
+                    Definition.ContextData[FieldRequirementsSyntax] = requirements;
+                    Definition.ContextData[FieldRequirementsEntity] = parameter.ParameterType;
+                }
             }
 
             _argumentsInitialized = true;
         }
-    }
-
-    /// <inheritdoc />
-    public new IObjectFieldDescriptor SyntaxNode(FieldDefinitionNode? fieldDefinition)
-    {
-        base.SyntaxNode(fieldDefinition);
-        return this;
     }
 
     /// <inheritdoc />
@@ -235,11 +252,6 @@ public class ObjectFieldDescriptor
         base.Description(value);
         return this;
     }
-
-    /// <inheritdoc />
-    [Obsolete("Use `Deprecated`.")]
-    public IObjectFieldDescriptor DeprecationReason(string? reason)
-        => Deprecated(reason);
 
     /// <inheritdoc />
     public new IObjectFieldDescriptor Deprecated(string? reason)
@@ -307,16 +319,6 @@ public class ObjectFieldDescriptor
         base.Ignore(ignore);
         return this;
     }
-
-    /// <inheritdoc />
-    public IObjectFieldDescriptor Resolver(FieldResolverDelegate fieldResolver)
-        => Resolve(fieldResolver);
-
-    /// <inheritdoc />
-    public IObjectFieldDescriptor Resolver(
-        FieldResolverDelegate fieldResolver,
-        Type? resultType) =>
-        Resolve(fieldResolver, resultType);
 
     /// <inheritdoc />
     public IObjectFieldDescriptor Resolve(FieldResolverDelegate fieldResolver)
@@ -471,6 +473,43 @@ public class ObjectFieldDescriptor
         return this;
     }
 
+    /// <inheritdoc />
+    public IObjectFieldDescriptor ParentRequires<TParent>(Expression<Func<TParent, object>> selector)
+        => ParentRequires<TParent>(ExpressionSelectionSetFormatter.Format(selector));
+
+    /// <inheritdoc />
+    public IObjectFieldDescriptor ParentRequires<TParent>(string? requires)
+    {
+        if (!(requires?.Length > 0))
+        {
+            Definition.Flags &= ~FieldFlags.WithRequirements;
+            Definition.ContextData.Remove(FieldRequirementsSyntax);
+            Definition.ContextData.Remove(FieldRequirementsEntity);
+            return this;
+        }
+
+        Definition.Flags |= FieldFlags.WithRequirements;
+        Definition.ContextData[FieldRequirementsSyntax] = requires;
+        Definition.ContextData[FieldRequirementsEntity] = typeof(TParent);
+        return this;
+    }
+
+    public IObjectFieldDescriptor ParentRequires(string? requires)
+    {
+        if (!(requires?.Length > 0))
+        {
+            Definition.Flags &= ~FieldFlags.WithRequirements;
+            Definition.ContextData.Remove(FieldRequirementsSyntax);
+            Definition.ContextData.Remove(FieldRequirementsEntity);
+            return this;
+        }
+
+        Definition.Flags |= FieldFlags.WithRequirements;
+        Definition.ContextData[FieldRequirementsSyntax] = requires;
+        Definition.ContextData[FieldRequirementsEntity] = Definition.SourceType;
+        return this;
+    }
+
     /// <summary>
     /// Creates a new instance of <see cref="ObjectFieldDescriptor"/>
     /// </summary>
@@ -522,4 +561,45 @@ public class ObjectFieldDescriptor
         IDescriptorContext context,
         ObjectFieldDefinition definition)
         => new(context, definition);
+
+    public static class ExpressionSelectionSetFormatter
+    {
+        public static string Format<T, TProperty>(Expression<Func<T, TProperty>> expression)
+        {
+            return ProcessExpression(expression.Body).Trim();
+        }
+
+        private static string ProcessExpression(Expression? expression)
+        {
+            if (expression is null)
+            {
+                return string.Empty;
+            }
+
+            switch (expression)
+            {
+                case MemberExpression memberExpr:
+                    var parent = ProcessExpression(memberExpr.Expression);
+                    return string.IsNullOrEmpty(parent)
+                        ? memberExpr.Member.Name
+                        : $"{parent} {{ {memberExpr.Member.Name} }}";
+
+                case NewExpression newExpr:
+                    return string.Join(" ", newExpr.Arguments.Select(ProcessExpression));
+
+                case MemberInitExpression memberInitExpr:
+                    return string.Join(" ", memberInitExpr.Bindings.OfType<MemberAssignment>()
+                        .Select(b => $"{b.Member.Name}{ProcessExpression(b.Expression)}"));
+
+                case MethodCallExpression { Method.Name: "Select" } methodCallExpr:
+                    if (methodCallExpr.Arguments is [_, UnaryExpression { Operand: LambdaExpression lambda }])
+                    {
+                        return $"{{ {ProcessExpression(lambda.Body)} }}";
+                    }
+                    break;
+            }
+
+            return string.Empty;
+        }
+    }
 }

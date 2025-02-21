@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using HotChocolate.Configuration;
 using HotChocolate.Language;
 using HotChocolate.Types.Descriptors.Definitions;
@@ -111,7 +109,7 @@ public static class TypeDependencyHelper
 
             if (field.Type is not null)
             {
-                dependencies.Add(new(field.Type, GetDefaultValueDependencyKind(field)));
+                dependencies.Add(new(field.Type));
             }
 
             CollectDirectiveDependencies(field, dependencies);
@@ -169,7 +167,7 @@ public static class TypeDependencyHelper
                 dependencies.Add(dependency);
             }
         }
-        
+
         if (definition.HasArguments)
         {
             foreach (var argument in definition.Arguments)
@@ -181,21 +179,18 @@ public static class TypeDependencyHelper
                         dependencies.Add(dependency);
                     }
                 }
-                
+
                 if (argument.Type is not null)
                 {
-                    dependencies.Add(new(
-                        argument.Type,
-                        GetDefaultValueDependencyKind(argument)));
+                    dependencies.Add(new(argument.Type));
                 }
             }
         }
     }
 
-    internal static void CollectDirectiveDependencies<T>(
-        TypeDefinitionBase<T> definition,
+    internal static void CollectDirectiveDependencies(
+        TypeDefinitionBase definition,
         ICollection<TypeDependency> dependencies)
-        where T : class, ISyntaxNode
     {
         if (definition.HasDirectives)
         {
@@ -336,17 +331,5 @@ public static class TypeDependencyHelper
         }
 
         CollectDependencies(definition, context.Dependencies);
-    }
-
-    private static TypeDependencyFulfilled GetDefaultValueDependencyKind(
-        ArgumentDefinition argumentDefinition)
-    {
-        var hasDefaultValue =
-            argumentDefinition.DefaultValue is not null and not NullValueNode ||
-            argumentDefinition.RuntimeDefaultValue is not null;
-
-        return hasDefaultValue
-            ? Completed
-            : Default;
     }
 }

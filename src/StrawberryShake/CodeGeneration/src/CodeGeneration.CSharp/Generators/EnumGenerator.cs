@@ -1,5 +1,4 @@
 using StrawberryShake.CodeGeneration.CSharp.Builders;
-using StrawberryShake.CodeGeneration.Descriptors;
 using StrawberryShake.CodeGeneration.Descriptors.TypeDescriptors;
 
 namespace StrawberryShake.CodeGeneration.CSharp.Generators;
@@ -19,6 +18,7 @@ public class EnumGenerator : CodeGenerator<EnumTypeDescriptor>
 
         var enumBuilder = EnumBuilder
             .New()
+            .SetAccessModifier(settings.AccessModifier)
             .SetComment(descriptor.Documentation)
             .SetName(descriptor.RuntimeType.Name)
             .SetUnderlyingType(descriptor.UnderlyingType);

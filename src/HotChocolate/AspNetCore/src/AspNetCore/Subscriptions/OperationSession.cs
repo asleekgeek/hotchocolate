@@ -1,4 +1,5 @@
 using HotChocolate.Language;
+using HotChocolate.Utilities;
 
 namespace HotChocolate.AspNetCore.Subscriptions;
 
@@ -34,11 +35,7 @@ internal sealed class OperationSession : IOperationSession
     public bool IsCompleted { get; private set; }
 
     public void BeginExecute(GraphQLRequest request, CancellationToken cancellationToken)
-        => Task.Factory.StartNew(
-            () => SendResultsAsync(request, cancellationToken),
-            default,
-            TaskCreationOptions.None,
-            TaskScheduler.Default);
+        => SendResultsAsync(request, cancellationToken).FireAndForget();
 
     private async Task SendResultsAsync(GraphQLRequest request, CancellationToken cancellationToken)
     {
@@ -50,12 +47,12 @@ internal sealed class OperationSession : IOperationSession
         {
             var requestBuilder = CreateRequestBuilder(request);
             await _interceptor.OnRequestAsync(_session, Id, requestBuilder, ct);
-            await using var result = await _executor.ExecuteAsync(requestBuilder.Create(), ct);
+            await using var result = await _executor.ExecuteAsync(requestBuilder.Build(), ct);
 
             switch (result)
             {
-                case IQueryResult queryResult:
-                    if (queryResult.Data is null && queryResult.Errors is { Count: > 0 })
+                case IOperationResult queryResult:
+                    if (queryResult.Data is null && queryResult.Errors is { Count: > 0, })
                     {
                         await _session.Protocol.SendErrorMessageAsync(
                             _session,
@@ -70,10 +67,17 @@ internal sealed class OperationSession : IOperationSession
                     break;
 
                 case IResponseStream responseStream:
-                    await foreach (var item in
-                        responseStream.ReadResultsAsync().WithCancellation(ct))
+                    await foreach (var item in responseStream.ReadResultsAsync().WithCancellation(ct))
                     {
-                        await SendResultMessageAsync(item, ct);
+                        try
+                        {
+                            // use original cancellation token here to keep the websocket open for other streams.
+                            await SendResultMessageAsync(item, cancellationToken);
+                        }
+                        finally
+                        {
+                            await item.DisposeAsync();
+                        }
                     }
                     break;
             }
@@ -121,33 +125,33 @@ internal sealed class OperationSession : IOperationSession
         }
     }
 
-    private static IQueryRequestBuilder CreateRequestBuilder(GraphQLRequest request)
+    private static OperationRequestBuilder CreateRequestBuilder(GraphQLRequest request)
     {
-        var requestBuilder = new QueryRequestBuilder();
+        var requestBuilder = new OperationRequestBuilder();
 
         if (request.Query is not null)
         {
-            requestBuilder.SetQuery(request.Query);
+            requestBuilder.SetDocument(request.Query);
         }
 
         if (request.OperationName is not null)
         {
-            requestBuilder.SetOperation(request.OperationName);
+            requestBuilder.SetOperationName(request.OperationName);
         }
 
         if (request.QueryId is not null)
         {
-            requestBuilder.SetQueryId(request.QueryId);
+            requestBuilder.SetDocumentId(request.QueryId);
         }
 
         if (request.QueryHash is not null)
         {
-            requestBuilder.SetQueryHash(request.QueryHash);
+            requestBuilder.SetDocumentHash(request.QueryHash);
         }
 
         if (request.Variables is not null)
         {
-            requestBuilder.SetVariableValues(request.Variables);
+            requestBuilder.SetVariableValuesSet(request.Variables);
         }
 
         if (request.Extensions is not null)
@@ -158,7 +162,7 @@ internal sealed class OperationSession : IOperationSession
         return requestBuilder;
     }
 
-    private async Task SendResultMessageAsync(IQueryResult result, CancellationToken ct)
+    private async Task SendResultMessageAsync(IOperationResult result, CancellationToken ct)
     {
         result = await _interceptor.OnResultAsync(_session, Id, result, ct);
         await _session.Protocol.SendResultMessageAsync(_session, Id, result, ct);
@@ -176,7 +180,7 @@ internal sealed class OperationSession : IOperationSession
                 var errors =
                     error is AggregateError aggregateError
                         ? aggregateError.Errors
-                        : new[] { error };
+                        : new[] { error, };
 
                 await _session.Protocol.SendErrorMessageAsync(_session, Id, errors, ct);
             }

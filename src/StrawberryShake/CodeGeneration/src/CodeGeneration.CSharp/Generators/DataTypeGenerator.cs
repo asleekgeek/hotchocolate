@@ -1,7 +1,4 @@
-using System;
-using System.Linq;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using HotChocolate.Utilities;
 using StrawberryShake.CodeGeneration.Descriptors;
 using StrawberryShake.CodeGeneration.Descriptors.TypeDescriptors;
@@ -16,18 +13,23 @@ public class DataTypeGenerator : CSharpSyntaxGenerator<DataTypeDescriptor>
         DataTypeDescriptor descriptor,
         CSharpSyntaxGeneratorSettings settings)
     {
+        var modifier = settings.AccessModifier == AccessModifier.Public
+            ? SyntaxKind.PublicKeyword
+            : SyntaxKind.InternalKeyword;
+
         return descriptor.IsInterface
-            ? GenerateDataInterface(descriptor)
-            : GenerateDataClass(descriptor, settings);
+            ? GenerateDataInterface(descriptor, modifier)
+            : GenerateDataClass(descriptor, modifier, settings.EntityRecords);
     }
 
     private CSharpSyntaxGeneratorResult GenerateDataInterface(
-        DataTypeDescriptor descriptor)
+        DataTypeDescriptor descriptor,
+        SyntaxKind accessModifier)
     {
         var interfaceDeclaration =
             InterfaceDeclaration(descriptor.RuntimeType.Name)
                 .AddModifiers(
-                    Token(SyntaxKind.PublicKeyword),
+                    Token(accessModifier),
                     Token(SyntaxKind.PartialKeyword))
                 .AddGeneratedAttribute()
                 .AddSummary(descriptor.Documentation)
@@ -48,14 +50,15 @@ public class DataTypeGenerator : CSharpSyntaxGenerator<DataTypeDescriptor>
 
     private CSharpSyntaxGeneratorResult GenerateDataClass(
         DataTypeDescriptor descriptor,
-        CSharpSyntaxGeneratorSettings settings)
+        SyntaxKind accessModifier,
+        bool hasEntityRecords)
     {
-        if (settings.EntityRecords)
+        if (hasEntityRecords)
         {
             var recordDeclarationSyntax =
                 RecordDeclaration(Token(SyntaxKind.RecordKeyword), descriptor.RuntimeType.Name)
                     .AddModifiers(
-                        Token(SyntaxKind.PublicKeyword),
+                        Token(accessModifier),
                         Token(SyntaxKind.PartialKeyword))
                     .AddGeneratedAttribute()
                     .AddSummary(descriptor.Documentation)
@@ -96,7 +99,7 @@ public class DataTypeGenerator : CSharpSyntaxGenerator<DataTypeDescriptor>
             var classDeclaration =
                 ClassDeclaration(descriptor.RuntimeType.Name)
                     .AddModifiers(
-                        Token(SyntaxKind.PublicKeyword),
+                        Token(accessModifier),
                         Token(SyntaxKind.PartialKeyword))
                     .AddGeneratedAttribute()
                     .AddSummary(descriptor.Documentation)

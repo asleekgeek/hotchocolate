@@ -1,4 +1,3 @@
-using System;
 using System.Reflection;
 using HotChocolate.Configuration;
 using HotChocolate.Language;
@@ -9,7 +8,7 @@ using static HotChocolate.Internal.FieldInitHelper;
 
 namespace HotChocolate.Types;
 
-public class InputField : FieldBase<InputFieldDefinition>, IInputField, IHasProperty
+public class InputField : FieldBase, IInputField, IHasProperty
 {
     private Type _runtimeType = default!;
 
@@ -24,18 +23,12 @@ public class InputField : FieldBase<InputFieldDefinition>, IInputField, IHasProp
         {
             0 => null,
             1 => formatters[0],
-            _ => new AggregateInputValueFormatter(formatters)
+            _ => new AggregateInputValueFormatter(formatters),
         };
 
         IsDeprecated = !string.IsNullOrEmpty(definition.DeprecationReason);
         DeprecationReason = definition.DeprecationReason;
     }
-
-    /// <summary>
-    /// The associated syntax node from the GraphQL SDL.
-    /// </summary>
-    public new InputValueDefinitionNode? SyntaxNode =>
-        (InputValueDefinitionNode?)base.SyntaxNode;
 
     /// <inheritdoc />
     public IInputType Type { get; private set; } = default!;
@@ -71,7 +64,13 @@ public class InputField : FieldBase<InputFieldDefinition>, IInputField, IHasProp
     /// </summary>
     public PropertyInfo? Property { get; }
 
-    protected override void OnCompleteField(
+    protected sealed override void OnCompleteField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnCompleteField(context, declaringMember, (InputFieldDefinition)definition);
+
+    protected virtual void OnCompleteField(
         ITypeCompletionContext context,
         ITypeSystemMember declaringMember,
         InputFieldDefinition definition)
@@ -81,9 +80,49 @@ public class InputField : FieldBase<InputFieldDefinition>, IInputField, IHasProp
         Type = context.GetType<IInputType>(definition.Type!).EnsureInputType();
         _runtimeType = definition.RuntimeType ?? definition.Property?.PropertyType!;
         _runtimeType = CompleteRuntimeType(Type, _runtimeType, out var isOptional);
-        DefaultValue = CompleteDefaultValue(context, definition, Type, Coordinate);
         IsOptional = isOptional;
     }
+
+    protected sealed override void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnCompleteMetadata(context, declaringMember, (InputFieldDefinition)definition);
+
+    protected virtual void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        InputFieldDefinition definition)
+    {
+        base.OnCompleteMetadata(context, declaringMember, definition);
+        DefaultValue = CompleteDefaultValue(context, definition, Type, Coordinate);
+    }
+
+    protected sealed override void OnMakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => OnMakeExecutable(context, declaringMember, (InputFieldDefinition)definition);
+
+    protected virtual void OnMakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        InputFieldDefinition definition)
+        => base.OnMakeExecutable(context, declaringMember, definition);
+
+    protected sealed override void OnFinalizeField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+        => base.OnFinalizeField(context, declaringMember, (InputFieldDefinition)definition);
+
+    protected virtual void OnFinalizeField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        InputFieldDefinition definition)
+        => base.OnFinalizeField(context, declaringMember, definition);
+
+
 
     /// <summary>
     /// Returns a string that represents the current field.

@@ -1,8 +1,9 @@
 using System.ComponentModel.DataAnnotations;
-using CookieCrumble;
 using HotChocolate.Data.Filters;
 using HotChocolate.Execution;
+using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HotChocolate.Data;
 
@@ -10,10 +11,10 @@ namespace HotChocolate.Data;
 public class QueryableFilterVisitorInterfacesTests
 {
     private static readonly BarInterface[] _barEntities =
-    {
-        new() { Test = new InterfaceImpl1 { Prop = "a" } },
-        new() { Test = new InterfaceImpl1 { Prop = "b" } }
-    };
+    [
+        new() { Test = new InterfaceImpl1 { Prop = "a", }, },
+        new() { Test = new InterfaceImpl1 { Prop = "b", }, },
+    ];
 
     private readonly SchemaCache _cache;
 
@@ -26,31 +27,31 @@ public class QueryableFilterVisitorInterfacesTests
     public async Task Create_InterfaceStringEqual_Expression()
     {
         // arrange
-        var tester = _cache
-            .CreateSchema<BarInterface, FilterInputType<BarInterface>>(_barEntities,
+        var tester = await _cache
+            .CreateSchemaAsync<BarInterface, FilterInputType<BarInterface>>(_barEntities,
                 configure: Configure);
 
         // act
         var res1 = await tester.ExecuteAsync(
-            QueryRequestBuilder.New()
-                .SetQuery(
+            OperationRequestBuilder.New()
+                .SetDocument(
                     "{ root(where: { test: { prop: { eq: \"a\"}}}) " +
                     "{ test{ prop }}}")
-                .Create());
+                .Build());
 
         var res2 = await tester.ExecuteAsync(
-            QueryRequestBuilder.New()
-                .SetQuery(
+            OperationRequestBuilder.New()
+                .SetDocument(
                     "{ root(where: { test: { prop: { eq: \"b\"}}}) " +
                     "{ test{ prop }}}")
-                .Create());
+                .Build());
 
         var res3 = await tester.ExecuteAsync(
-            QueryRequestBuilder.New()
-                .SetQuery(
+            OperationRequestBuilder.New()
+                .SetDocument(
                     "{ root(where: { test: { prop: { eq: null}}}) " +
                     "{ test{ prop}}}")
-                .Create());
+                .Build());
 
         // assert
         await Snapshot
@@ -64,7 +65,7 @@ public class QueryableFilterVisitorInterfacesTests
             .MatchAsync();
     }
 
-    private static void Configure(ISchemaBuilder builder)
+    private static void Configure(IRequestExecutorBuilder builder)
         => builder
             .AddObjectType<InterfaceImpl1>(x => x.Implements<InterfaceType<Test>>())
             .AddObjectType<InterfaceImpl2>(x => x.Implements<InterfaceType<Test>>())

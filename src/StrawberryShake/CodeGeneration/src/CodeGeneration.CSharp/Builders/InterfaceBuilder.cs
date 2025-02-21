@@ -1,16 +1,19 @@
-using System;
-using System.Collections.Generic;
-using HotChocolate;
-
 namespace StrawberryShake.CodeGeneration.CSharp.Builders;
 
 public class InterfaceBuilder : AbstractTypeBuilder
 {
-    private readonly List<MethodBuilder> _methods = new();
+    private AccessModifier _accessModifier;
+    private readonly List<MethodBuilder> _methods = [];
 
     private XmlCommentBuilder? _xmlComment;
 
     public static InterfaceBuilder New() => new();
+
+    public InterfaceBuilder SetAccessModifier(AccessModifier value)
+    {
+        _accessModifier = value;
+        return this;
+    }
 
     public new InterfaceBuilder SetName(string name)
     {
@@ -74,7 +77,9 @@ public class InterfaceBuilder : AbstractTypeBuilder
 
         writer.WriteIndent();
 
-        writer.Write("public partial interface ");
+        var modifier = _accessModifier.ToString().ToLowerInvariant();
+
+        writer.Write($"{modifier} partial interface ");
         writer.WriteLine(Name);
 
         if (Implements.Count > 0)

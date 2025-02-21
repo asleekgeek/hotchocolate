@@ -1,7 +1,4 @@
-using System;
 using HotChocolate.Types;
-using Snapshooter.Xunit;
-using Xunit;
 
 namespace HotChocolate.Configuration;
 
@@ -45,6 +42,29 @@ public class TypeDiscoveryTests
             .Create()
             .Print()
             .MatchSnapshot();
+    }
+
+    [Fact]
+    public void InferInputTypeWithComputedProperty()
+    {
+        SchemaBuilder.New()
+            .AddQueryType<QueryTypeWithComputedProperty>()
+            .Create()
+            .Print()
+            .MatchSnapshot();
+    }
+
+    [Fact]
+    public void Custom_LocalDate_Should_Throw_SchemaException_When_Not_Bound()
+    {
+        static void Act() =>
+            SchemaBuilder.New()
+                .AddQueryType<QueryTypeWithCustomLocalDate>()
+                .Create();
+
+        Assert.Equal(
+            "The name `LocalDate` was already registered by another type.",
+            Assert.Throws<SchemaException>(Act).Errors[0].Message);
     }
 
     public class QueryWithDateTime
@@ -122,7 +142,7 @@ public class TypeDiscoveryTests
 
     public struct InputStructWithCtor
     {
-        public InputStructWithCtor(System.Collections.Generic.IEnumerable<int> values) =>
+        public InputStructWithCtor(IEnumerable<int> values) =>
             Values = System.Collections.Immutable.ImmutableArray.CreateRange(values);
 
         public System.Collections.Immutable.ImmutableArray<int> Values { get; set; }
@@ -131,5 +151,29 @@ public class TypeDiscoveryTests
     public class QueryTypeWithInputStruct
     {
         public int Foo(InputStructWithCtor arg) => default;
+    }
+
+    public class InputTypeWithReadOnlyProperties(int property2)
+    {
+        public int Property1 { get; set; }
+
+        public int Property2 { get; } = property2;
+
+        public int Property3 => Property2 / 2;
+    }
+
+    public class QueryTypeWithComputedProperty
+    {
+        public int Foo(InputTypeWithReadOnlyProperties arg) => arg.Property1;
+    }
+
+    public class QueryTypeWithCustomLocalDate
+    {
+        public LocalDate Foo() => new();
+    }
+
+    public class LocalDate
+    {
+        public DateOnly Date { get; set; } = new();
     }
 }

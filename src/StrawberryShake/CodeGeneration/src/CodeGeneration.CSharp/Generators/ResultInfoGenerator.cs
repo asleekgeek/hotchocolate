@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using StrawberryShake.CodeGeneration.CSharp.Builders;
 using StrawberryShake.CodeGeneration.CSharp.Extensions;
 using StrawberryShake.CodeGeneration.Descriptors.TypeDescriptors;
@@ -41,6 +39,7 @@ public class ResultInfoGenerator : ClassBaseGenerator<ITypeDescriptor>
 
         var classBuilder = ClassBuilder
             .New()
+            .SetAccessModifier(settings.AccessModifier)
             .AddImplements(TypeNames.IOperationResultDataInfo)
             .SetName(fileName);
 
@@ -65,8 +64,8 @@ public class ResultInfoGenerator : ClassBaseGenerator<ITypeDescriptor>
             constructorBuilder.AddCode(
                 AssignmentBuilder
                     .New()
-                    .SetLefthandSide(GetLeftPropertyAssignment(prop.Name))
-                    .SetRighthandSide(paramName));
+                    .SetLeftHandSide(GetLeftPropertyAssignment(prop.Name))
+                    .SetRightHandSide(paramName));
         }
 
         classBuilder

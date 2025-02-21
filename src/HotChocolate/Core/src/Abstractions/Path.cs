@@ -1,11 +1,4 @@
-#nullable enable
-
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
-using HotChocolate.Execution;
-using HotChocolate.Utilities;
 
 namespace HotChocolate;
 
@@ -14,22 +7,24 @@ namespace HotChocolate;
 /// </summary>
 public abstract class Path : IEquatable<Path>
 {
+    private readonly Path? _parent;
+
     protected Path()
     {
-        Parent = this;
+        _parent = null;
         Length = 0;
     }
-    
+
     protected Path(Path parent)
     {
-        Parent = parent ?? throw new ArgumentNullException(nameof(parent));
+        _parent = parent ?? throw new ArgumentNullException(nameof(parent));
         Length = parent.Length + 1;
     }
-    
+
     /// <summary>
     /// Gets the parent path segment.
     /// </summary>
-    public Path Parent { get; }
+    public Path Parent => _parent!;
 
     /// <summary>
     /// Gets the count of segments this path contains.
@@ -66,7 +61,7 @@ public abstract class Path : IEquatable<Path>
             throw new InvalidOperationException(
                 "Appending a indexer on the root segment is not allowed.");
         }
-        
+
         return new IndexerPathSegment(this, index);
     }
 
@@ -82,7 +77,7 @@ public abstract class Path : IEquatable<Path>
         {
             return "/";
         }
-        
+
         var sb = new StringBuilder();
         var current = this;
 
@@ -105,7 +100,7 @@ public abstract class Path : IEquatable<Path>
                 default:
                     throw new NotSupportedException();
             }
-            
+
             current = current.Parent;
         }
 
@@ -175,7 +170,7 @@ public abstract class Path : IEquatable<Path>
         {
             null => false,
             Path p => Equals(p),
-            _ => false
+            _ => false,
         };
 
     /// <summary>
@@ -187,7 +182,7 @@ public abstract class Path : IEquatable<Path>
     public override int GetHashCode()
         => HashCode.Combine(Parent, Length);
 
-    internal static Path FromList(params object[] elements) 
+    internal static Path FromList(params object[] elements)
         => FromList((IReadOnlyList<object>)elements);
 
     internal static Path FromList(IReadOnlyList<object> path)
@@ -210,7 +205,7 @@ public abstract class Path : IEquatable<Path>
             {
                 string n => segment.Append(n),
                 int n => segment.Append(n),
-                _ => throw new NotSupportedException()
+                _ => throw new NotSupportedException(),
             };
         }
 
@@ -238,11 +233,7 @@ public abstract class Path : IEquatable<Path>
 
         /// <inheritdoc />
         public override int GetHashCode()
-        {
-            // ReSharper disable NonReadonlyMemberInGetHashCode
-            return HashCode.Combine(Parent, Length);
-            // ReSharper restore NonReadonlyMemberInGetHashCode
-        }
+            => 0;
 
         public static RootPathSegment Instance { get; } = new();
     }

@@ -1,9 +1,8 @@
-using System;
-using System.Collections.Generic;
 using HotChocolate.Configuration;
 using HotChocolate.Internal;
 using HotChocolate.Types.Descriptors;
 using HotChocolate.Types.Descriptors.Definitions;
+using HotChocolate.Types.Helpers;
 using static HotChocolate.Internal.FieldInitHelper;
 using static HotChocolate.Types.Helpers.CompleteInterfacesHelper;
 
@@ -13,7 +12,7 @@ namespace HotChocolate.Types;
 
 public partial class InterfaceType
 {
-    private InterfaceType[] _implements = Array.Empty<InterfaceType>();
+    private InterfaceType[] _implements = [];
     private Action<IInterfaceTypeDescriptor>? _configure;
     private ResolveAbstractType? _resolveAbstractType;
     private ISchema _schema = default!;
@@ -55,12 +54,47 @@ public partial class InterfaceType
     {
         base.OnCompleteType(context, definition);
 
-        SyntaxNode = definition.SyntaxNode;
         Fields = OnCompleteFields(context, definition);
-        context.DescriptorContext.SchemaCompleted += (_, args) => _schema = args.Schema;
+        context.DescriptorContext.OnSchemaCreated(schema => _schema = schema);
 
         CompleteAbstractTypeResolver(definition.ResolveAbstractType);
         _implements = CompleteInterfaces(context, definition.GetInterfaces(), this);
+    }
+
+    protected override void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        InterfaceTypeDefinition definition)
+    {
+        base.OnCompleteMetadata(context, definition);
+
+        foreach (IFieldCompletion field in Fields)
+        {
+            field.CompleteMetadata(context, this);
+        }
+    }
+
+    protected override void OnMakeExecutable(
+        ITypeCompletionContext context,
+        InterfaceTypeDefinition definition)
+    {
+        base.OnMakeExecutable(context, definition);
+
+        foreach (IFieldCompletion field in Fields)
+        {
+            field.MakeExecutable(context, this);
+        }
+    }
+
+    protected override void OnFinalizeType(
+        ITypeCompletionContext context,
+        InterfaceTypeDefinition definition)
+    {
+        base.OnFinalizeType(context, definition);
+
+        foreach (IFieldCompletion field in Fields)
+        {
+            field.Finalize(context, this);
+        }
     }
 
     protected virtual FieldCollection<InterfaceField> OnCompleteFields(

@@ -1,13 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using HotChocolate.Configuration;
 using HotChocolate.Internal;
-using HotChocolate.Properties;
+using HotChocolate.Language;
 using HotChocolate.Resolvers;
 using HotChocolate.Types.Descriptors;
 using HotChocolate.Types.Descriptors.Definitions;
+using HotChocolate.Types.Helpers;
+using HotChocolate.Utilities;
 using static HotChocolate.Internal.FieldInitHelper;
 using static HotChocolate.Utilities.Serialization.InputObjectCompiler;
 
@@ -15,13 +13,6 @@ using static HotChocolate.Utilities.Serialization.InputObjectCompiler;
 
 namespace HotChocolate.Types;
 
-/// <summary>
-/// A GraphQL schema describes directives which are used to annotate various parts of a
-/// GraphQL document as an indicator that they should be evaluated differently by a
-/// validator, executor, or client tool such as a code generator.
-///
-/// http://spec.graphql.org/draft/#sec-Type-System.Directives
-/// </summary>
 public partial class DirectiveType
 {
     protected override DirectiveTypeDefinition CreateDefinition(ITypeDiscoveryContext context)
@@ -74,9 +65,7 @@ public partial class DirectiveType
         base.OnCompleteType(context, definition);
 
         _inputParser = context.DescriptorContext.InputParser;
-        _inputFormatter = context.DescriptorContext.InputFormatter;
 
-        SyntaxNode = definition.SyntaxNode;
         Locations =  definition.Locations;
         Arguments = OnCompleteFields(context, definition);
         IsPublic = definition.IsPublic;
@@ -84,23 +73,52 @@ public partial class DirectiveType
 
         _createInstance = OnCompleteCreateInstance(context, definition);
         _getFieldValues = OnCompleteGetFieldValues(context, definition);
+        _parse = OnCompleteParse(context, definition);
+        _format = OnCompleteFormat(context, definition);
 
         if (definition.Locations == 0)
         {
-            // TODO : move to error helper
-            context.ReportError(SchemaErrorBuilder.New()
-                .SetMessage(string.Format(
-                    CultureInfo.InvariantCulture,
-                    TypeResources.DirectiveType_NoLocations,
-                    Name))
-                .SetCode(ErrorCodes.Schema.MissingType)
-                .SetTypeSystemObject(context.Type)
-                .AddSyntaxNode(definition.SyntaxNode)
-                .Build());
+            context.ReportError(ErrorHelper.DirectiveType_NoLocations(Name, this));
         }
 
         IsExecutableDirective = (Locations & DirectiveLocation.Executable) != 0;
         IsTypeSystemDirective = (Locations & DirectiveLocation.TypeSystem) != 0;
+    }
+
+    protected override void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        DirectiveTypeDefinition definition)
+    {
+        base.OnCompleteMetadata(context, definition);
+
+        foreach (IFieldCompletion field in Arguments)
+        {
+            field.CompleteMetadata(context, this);
+        }
+    }
+
+    protected override void OnMakeExecutable(
+        ITypeCompletionContext context,
+        DirectiveTypeDefinition definition)
+    {
+        base.OnMakeExecutable(context, definition);
+
+        foreach (IFieldCompletion field in Arguments)
+        {
+            field.MakeExecutable(context, this);
+        }
+    }
+
+    protected override void OnFinalizeType(
+        ITypeCompletionContext context,
+        DirectiveTypeDefinition definition)
+    {
+        base.OnFinalizeType(context, definition);
+
+        foreach (IFieldCompletion field in Arguments)
+        {
+            field.Finalize(context, this);
+        }
     }
 
     protected virtual FieldCollection<DirectiveArgument> OnCompleteFields(
@@ -116,46 +134,60 @@ public partial class DirectiveType
         ITypeCompletionContext context,
         DirectiveTypeDefinition definition)
     {
-        Func<object?[], object>? createInstance = null;
-
         if (definition.CreateInstance is not null)
         {
-            createInstance = definition.CreateInstance;
+            return definition.CreateInstance;
         }
 
         if (RuntimeType == typeof(object) || Arguments.Any(t => t.Property is null))
         {
-            createInstance ??= CreateDictionaryInstance;
-        }
-        else
-        {
-            createInstance ??= CompileFactory(this);
+            return CreateDictionaryInstance;
         }
 
-        return createInstance;
+        return  CompileFactory(this);
     }
 
     protected virtual Action<object, object?[]> OnCompleteGetFieldValues(
         ITypeCompletionContext context,
         DirectiveTypeDefinition definition)
     {
-        Action<object, object?[]>? getFieldValues = null;
-
         if (definition.GetFieldData is not null)
         {
-            getFieldValues = definition.GetFieldData;
+            return definition.GetFieldData;
         }
 
         if (RuntimeType == typeof(object) || Arguments.Any(t => t.Property is null))
         {
-            getFieldValues ??= CreateDictionaryGetValues;
-        }
-        else
-        {
-            getFieldValues ??= CompileGetFieldValues(this);
+            return CreateDictionaryGetValues;
         }
 
-        return getFieldValues;
+        return CompileGetFieldValues(this);
+    }
+
+    protected virtual Func<DirectiveNode, object> OnCompleteParse(
+        ITypeCompletionContext context,
+        DirectiveTypeDefinition definition)
+    {
+        if (definition.Parse is not null)
+        {
+            return definition.Parse;
+        }
+
+        var inputParser = context.DescriptorContext.InputParser;
+        return node => inputParser.ParseDirective(node, this);
+    }
+
+    protected virtual Func<object, DirectiveNode> OnCompleteFormat(
+        ITypeCompletionContext context,
+        DirectiveTypeDefinition definition)
+    {
+        if (definition.Format is not null)
+        {
+            return definition.Format;
+        }
+
+        var inputFormatter = context.DescriptorContext.InputFormatter;
+        return directive => inputFormatter.FormatDirective(directive, this);
     }
 
     protected virtual DirectiveMiddleware? OnCompleteMiddleware(

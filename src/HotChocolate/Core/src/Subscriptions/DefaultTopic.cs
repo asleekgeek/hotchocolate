@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions.Diagnostics;
+using HotChocolate.Utilities;
 using static System.Runtime.InteropServices.CollectionsMarshal;
 using static System.Threading.Channels.Channel;
 
@@ -22,7 +23,7 @@ public abstract class DefaultTopic<TMessage> : ITopic
     private readonly Channel<TMessage> _incoming;
     private readonly BoundedChannelOptions _channelOptions;
     private readonly ISubscriptionDiagnosticEvents _diagnosticEvents;
-    private readonly List<Channel<TMessage>> _subscribers = new();
+    private readonly List<Channel<TMessage>> _subscribers = [];
     private bool _completed;
     private bool _disposed;
 
@@ -37,7 +38,7 @@ public abstract class DefaultTopic<TMessage> : ITopic
         Name = name ?? throw new ArgumentNullException(nameof(name));
         _channelOptions = new BoundedChannelOptions(capacity)
         {
-            FullMode = (BoundedChannelFullMode) (int) fullMode
+            FullMode = (BoundedChannelFullMode) (int) fullMode,
         };
         _incoming = CreateUnbounded<TMessage>();
         _diagnosticEvents = diagnosticEvents;
@@ -53,7 +54,7 @@ public abstract class DefaultTopic<TMessage> : ITopic
         Name = name ?? throw new ArgumentNullException(nameof(name));
         _channelOptions = new BoundedChannelOptions(capacity)
         {
-            FullMode = (BoundedChannelFullMode) (int) fullMode
+            FullMode = (BoundedChannelFullMode) (int) fullMode,
         };
         _incoming = incomingMessages;
         _diagnosticEvents = diagnosticEvents;
@@ -193,9 +194,7 @@ public abstract class DefaultTopic<TMessage> : ITopic
     }
 
     private void BeginProcessing(IDisposable session)
-        => Task.Factory.StartNew(
-            async s => await ProcessMessagesSessionAsync((IDisposable)s!).ConfigureAwait(false),
-            session);
+        => ProcessMessagesSessionAsync(session).FireAndForget();
 
     private async Task ProcessMessagesSessionAsync(IDisposable session)
     {
@@ -254,7 +253,7 @@ public abstract class DefaultTopic<TMessage> : ITopic
                     {
                         allWritesSuccessful = false;
                     }
-                    start = ref Unsafe.Add(ref start, 1);
+                    start = ref Unsafe.Add(ref start, 1)!;
                 }
 
                 if (!allWritesSuccessful || iterations++ >= 8)

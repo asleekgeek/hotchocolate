@@ -1,12 +1,6 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace HotChocolate.Execution.Processing.Tasks;
 
@@ -142,7 +136,8 @@ internal static class StreamHelper
                     () => _enumerator.ToList(),
                     _cancellationToken,
                     TaskCreationOptions.None,
-                    TaskScheduler.Default);
+                    TaskScheduler.Default)
+                    .ConfigureAwait(false);
 
                 if (_index >= _list.Count)
                 {

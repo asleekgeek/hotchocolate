@@ -1,4 +1,3 @@
-using System.Linq;
 using StrawberryShake.CodeGeneration.CSharp.Builders;
 using StrawberryShake.CodeGeneration.CSharp.Extensions;
 using StrawberryShake.CodeGeneration.Descriptors.TypeDescriptors;
@@ -21,6 +20,7 @@ public class ResultInterfaceGenerator : CodeGenerator<InterfaceTypeDescriptor>
 
         var interfaceBuilder = InterfaceBuilder
             .New()
+            .SetAccessModifier(settings.AccessModifier)
             .SetComment(descriptor.Description)
             .SetName(fileName);
 

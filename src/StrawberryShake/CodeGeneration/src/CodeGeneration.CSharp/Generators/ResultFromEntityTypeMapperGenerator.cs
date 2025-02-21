@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using StrawberryShake.CodeGeneration.CSharp.Builders;
 using StrawberryShake.CodeGeneration.CSharp.Extensions;
 using StrawberryShake.CodeGeneration.Descriptors.TypeDescriptors;
@@ -38,6 +37,7 @@ public class ResultFromEntityTypeMapperGenerator : ClassBaseGenerator<ResultFrom
 
         var classBuilder = ClassBuilder
             .New()
+            .SetAccessModifier(settings.AccessModifier)
             .AddImplements(
                 IEntityMapper.WithGeneric(
                     descriptor.ExtractType().ToString(),
@@ -80,8 +80,8 @@ public class ResultFromEntityTypeMapperGenerator : ClassBaseGenerator<ResultFrom
                 .SetCondition($"{_snapshot} is null")
                 .AddCode(AssignmentBuilder
                     .New()
-                    .SetLefthandSide(_snapshot)
-                    .SetRighthandSide($"{GetFieldName(_entityStore)}.CurrentSnapshot")))
+                    .SetLeftHandSide(_snapshot)
+                    .SetRightHandSide($"{GetFieldName(_entityStore)}.CurrentSnapshot")))
             .AddEmptyLine();
 
         // creates the instance of the model that is being mapped.

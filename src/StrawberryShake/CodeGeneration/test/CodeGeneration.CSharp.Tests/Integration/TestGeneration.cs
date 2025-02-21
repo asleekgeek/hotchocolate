@@ -1,6 +1,5 @@
 using ChilliCream.Testing;
 using StrawberryShake.Tools.Configuration;
-using Xunit;
 using static StrawberryShake.CodeGeneration.CSharp.GeneratorTestHelper;
 
 namespace StrawberryShake.CodeGeneration.CSharp.Integration;
@@ -15,6 +14,37 @@ public class TestGeneration
                 hero(episode: NEW_HOPE) {
                     name
                 }
+            }");
+
+
+    [Fact]
+    public void StarWarsGetHeroWithFragmentIncludeAndSkipDirective() =>
+        AssertStarWarsResult(
+            CreateIntegrationTest(),
+            @"query GetHeroWithFragmentIncludeAndSkipDirective($includePageInfo: Boolean = false, $skipPageInfo: Boolean = true) {
+                hero(episode: NEW_HOPE) {
+                    ...HeroFragment
+                }
+            }
+
+            fragment HeroFragment on Character {
+                id
+                friends {
+                    ...FriendsFragment
+                }
+            }
+
+            fragment FriendsFragment on FriendsConnection {
+                includedPageInfo: pageInfo @include(if: $includePageInfo) {
+                    ...PageInfoFragment
+                }
+                skippedPageInfo: pageInfo @skip(if: $skipPageInfo) {
+                    ...PageInfoFragment
+                }
+            }
+
+            fragment PageInfoFragment on PageInfo {
+                hasNextPage
             }");
 
     [Fact]
@@ -50,11 +80,11 @@ public class TestGeneration
     [Fact]
     public void MultiProfile() =>
         AssertStarWarsResult(
-            CreateIntegrationTest(profiles: new[]
-            {
+            CreateIntegrationTest(profiles:
+            [
                 new TransportProfile("InMemory", TransportType.InMemory),
-                TransportProfile.Default
-            }),
+                TransportProfile.Default,
+            ]),
             @"query GetHero {
                 hero(episode: NEW_HOPE) {
                     name
@@ -133,12 +163,23 @@ public class TestGeneration
             }");
 
     [Fact]
+    public void StarWarsGetHeroTraits() =>
+        AssertStarWarsResult(
+            CreateIntegrationTest(),
+            @"query GetHero {
+                hero(episode: NEW_HOPE) {
+                    name
+                    traits
+                }
+            }");
+
+    [Fact]
     public void EntityIdOrData() =>
         AssertResult(
-            CreateIntegrationTest(profiles: new[]
-            {
-                new TransportProfile("Default", TransportType.InMemory)
-            }),
+            CreateIntegrationTest(profiles:
+            [
+                new TransportProfile("Default", TransportType.InMemory),
+            ]),
             skipWarnings: true,
             @"
                 query GetFoo {
@@ -229,11 +270,11 @@ public class TestGeneration
     [Fact]
     public void StarWarsOnReviewSubCompletion() =>
         AssertStarWarsResult(
-            CreateIntegrationTest(profiles: new[]
-            {
+            CreateIntegrationTest(profiles:
+            [
                 new TransportProfile("InMemory", TransportType.InMemory),
-                TransportProfile.Default
-            }),
+                TransportProfile.Default,
+            ]),
             @"subscription OnReviewSub {
                 onReview(episode: NEW_HOPE) {
                     __typename
@@ -246,6 +287,21 @@ public class TestGeneration
     public void StarWarsOnReviewSubNoStore() =>
         AssertStarWarsResult(
             CreateIntegrationTest(noStore: true),
+            @"subscription OnReviewSub {
+                onReview(episode: NEW_HOPE) {
+                    __typename
+                    stars
+                    commentary
+                }
+            }");
+
+    [Fact]
+    public void StarWarsOnReviewSubGraphQLSSE() =>
+        AssertStarWarsResult(
+            CreateIntegrationTest(profiles:
+            [
+                new TransportProfile("default", TransportType.Http),
+            ]),
             @"subscription OnReviewSub {
                 onReview(episode: NEW_HOPE) {
                     __typename
@@ -322,10 +378,10 @@ public class TestGeneration
     [Fact]
     public void UploadScalar() =>
         AssertResult(
-            CreateIntegrationTest(profiles: new[]
-            {
-                new TransportProfile("Default", TransportType.Http)
-            }),
+            CreateIntegrationTest(profiles:
+            [
+                new TransportProfile("Default", TransportType.Http),
+            ]),
             skipWarnings: true,
             UploadQueries,
             UploadSchema,
@@ -334,12 +390,36 @@ public class TestGeneration
     [Fact]
     public void UploadScalar_InMemory() =>
         AssertResult(
-            CreateIntegrationTest(profiles: new[]
-            {
-                new TransportProfile("Default", TransportType.InMemory)
-            }),
+            CreateIntegrationTest(profiles:
+            [
+                new TransportProfile("Default", TransportType.InMemory),
+            ]),
             skipWarnings: true,
             UploadQueries,
             UploadSchema,
             "extend schema @key(fields: \"id\")");
+
+    [Fact]
+    public void LocalTypes() =>
+        AssertResult(
+            CreateIntegrationTest(),
+            skipWarnings: true,
+            """
+            query LocalTypes {
+                localDate(input: "2021-10-10")
+                localDateTime(input: "2021-10-10T10:10:10")
+                localTime(input: "10:10:10")
+            }
+            """,
+            """
+            type Query {
+                localDate(input: LocalDate!): LocalDate!
+                localDateTime(input: LocalDateTime!): LocalDateTime!
+                localTime(input: LocalTime!): LocalTime!
+            }
+
+            scalar LocalDate
+            scalar LocalDateTime
+            scalar LocalTime
+            """);
 }

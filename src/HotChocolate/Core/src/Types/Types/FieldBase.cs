@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using HotChocolate.Configuration;
-using HotChocolate.Language;
 using HotChocolate.Types.Descriptors.Definitions;
 using HotChocolate.Types.Helpers;
 using HotChocolate.Utilities;
@@ -11,20 +8,18 @@ using ThrowHelper = HotChocolate.Utilities.ThrowHelper;
 
 namespace HotChocolate.Types;
 
-public abstract class FieldBase<TDefinition>
+public abstract class FieldBase
     : IField
     , IFieldCompletion
-    where TDefinition : FieldDefinitionBase, IHasSyntaxNode
 {
-    private TDefinition? _definition;
+    private FieldDefinitionBase? _definition;
     private FieldFlags _flags;
 
-    protected FieldBase(TDefinition definition, int index)
+    protected FieldBase(FieldDefinitionBase definition, int index)
     {
         _definition = definition ?? throw new ArgumentNullException(nameof(definition));
         Index = index;
 
-        SyntaxNode = definition.SyntaxNode;
         Name = definition.Name.EnsureGraphQLName();
         Description = definition.Description;
         Flags = definition.Flags;
@@ -40,13 +35,10 @@ public abstract class FieldBase<TDefinition>
     public string? Description { get; }
 
     /// <inheritdoc />
-    public ISyntaxNode? SyntaxNode { get; }
-
-    /// <inheritdoc />
     public ITypeSystemObject DeclaringType { get; private set; }
 
     /// <inheritdoc />
-    public FieldCoordinate Coordinate { get; private set; }
+    public SchemaCoordinate Coordinate { get; private set; }
 
     /// <inheritdoc />
     public int Index { get; }
@@ -75,26 +67,19 @@ public abstract class FieldBase<TDefinition>
         ITypeSystemMember declaringMember)
     {
         AssertMutable();
-
         OnCompleteField(context, declaringMember, _definition!);
-
         ContextData = _definition!.GetContextData();
-        _definition = null;
-        _flags |= FieldFlags.Sealed;
     }
 
     protected virtual void OnCompleteField(
         ITypeCompletionContext context,
         ITypeSystemMember declaringMember,
-        TDefinition definition)
+        FieldDefinitionBase definition)
     {
         DeclaringType = context.Type;
         Coordinate = declaringMember is IField field
-            ? new FieldCoordinate(context.Type.Name, field.Name, definition.Name)
-            : new FieldCoordinate(context.Type.Name, definition.Name);
-
-        Directives = DirectiveCollection.CreateAndComplete(
-            context, this, definition.GetDirectives());
+            ? new SchemaCoordinate(context.Type.Name, field.Name, definition.Name)
+            : new SchemaCoordinate(context.Type.Name, definition.Name);
         Flags = definition.Flags;
     }
 
@@ -102,6 +87,70 @@ public abstract class FieldBase<TDefinition>
         ITypeCompletionContext context,
         ITypeSystemMember declaringMember)
         => CompleteField(context, declaringMember);
+
+    private void CompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember)
+    {
+        AssertMutable();
+        OnCompleteMetadata(context, declaringMember, _definition!);
+    }
+
+    protected virtual void OnCompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+    {
+        Directives = DirectiveCollection.CreateAndComplete(
+            context, this, definition.GetDirectives());
+    }
+
+    void IFieldCompletion.CompleteMetadata(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember)
+        => CompleteMetadata(context, declaringMember);
+
+    private void MakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember)
+    {
+        AssertMutable();
+        OnMakeExecutable(context, declaringMember, _definition!);
+    }
+
+    protected virtual void OnMakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+    {
+    }
+
+    void IFieldCompletion.MakeExecutable(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember)
+        => MakeExecutable(context, declaringMember);
+
+    private void FinalizeField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember)
+    {
+        AssertMutable();
+        OnFinalizeField(context, declaringMember, _definition!);
+        _definition = null;
+        _flags |= FieldFlags.Sealed;
+    }
+
+    protected virtual void OnFinalizeField(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember,
+        FieldDefinitionBase definition)
+    {
+    }
+
+    void IFieldCompletion.Finalize(
+        ITypeCompletionContext context,
+        ITypeSystemMember declaringMember)
+        => FinalizeField(context, declaringMember);
 
     private void AssertMutable()
     {

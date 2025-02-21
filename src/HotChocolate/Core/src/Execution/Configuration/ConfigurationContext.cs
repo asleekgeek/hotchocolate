@@ -1,5 +1,4 @@
-using System;
-using System.Collections.Generic;
+using HotChocolate.Types.Descriptors;
 
 namespace HotChocolate.Execution.Configuration;
 
@@ -8,6 +7,8 @@ namespace HotChocolate.Execution.Configuration;
 /// </summary>
 public sealed class ConfigurationContext : IHasContextData
 {
+    private IDescriptorContext? _descriptorContext;
+
     /// <summary>
     /// Initializes a new instance of <see cref="ConfigurationContext"/>.
     /// </summary>
@@ -55,4 +56,20 @@ public sealed class ConfigurationContext : IHasContextData
     /// Gets the configuration context data which can be used by hooks to store arbitrary state.
     /// </summary>
     public IDictionary<string, object?> ContextData { get; } = new Dictionary<string, object?>();
+
+    /// <summary>
+    /// Gets the descriptor context.
+    /// </summary>
+    public IDescriptorContext DescriptorContext
+    {
+        get
+        {
+            if(_descriptorContext is null)
+            {
+                _descriptorContext = SchemaBuilder.CreateContext();
+            }
+
+            return _descriptorContext;
+        }
+    }
 }

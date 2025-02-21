@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using HotChocolate.Tests;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
 using HotChocolate.Types.Descriptors.Definitions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace HotChocolate.Execution.Configuration;
 
@@ -68,10 +65,66 @@ public class TypeModuleTests
             .MatchSnapshotAsync();
     }
 
+    [Fact]
+    public async Task Ensure_Warmups_Are_Triggered_An_Appropriate_Number_Of_Times()
+    {
+        // arrange
+        var typeModule = new TriggerableTypeModule();
+        var warmups = 0;
+        var warmupResetEvent = new AutoResetEvent(false);
+
+        var services = new ServiceCollection();
+        services
+            .AddGraphQL()
+            .AddTypeModule(_ => typeModule)
+            .InitializeOnStartup(keepWarm: true, warmup: (_, _) =>
+            {
+                warmups++;
+                warmupResetEvent.Set();
+                return Task.CompletedTask;
+            })
+            .AddQueryType(d => d.Field("foo").Resolve(""));
+        var provider = services.BuildServiceProvider();
+        var warmupService = provider.GetRequiredService<IHostedService>();
+
+        using var cts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            await warmupService.StartAsync(CancellationToken.None);
+        }, cts.Token);
+
+        var resolver = provider.GetRequiredService<IRequestExecutorResolver>();
+
+        await resolver.GetRequestExecutorAsync(null, cts.Token);
+
+        // act
+        // assert
+        warmupResetEvent.WaitOne();
+
+        Assert.Equal(1, warmups);
+        warmupResetEvent.Reset();
+
+        typeModule.TriggerChange();
+        warmupResetEvent.WaitOne();
+
+        Assert.Equal(2, warmups);
+        warmupResetEvent.Reset();
+
+        typeModule.TriggerChange();
+        warmupResetEvent.WaitOne();
+
+        Assert.Equal(3, warmups);
+    }
+
+    private sealed class TriggerableTypeModule : TypeModule
+    {
+        public void TriggerChange() => OnTypesChanged();
+    }
+
     public class DummyTypeModule : ITypeModule
     {
 #pragma warning disable CS0067
-        public event EventHandler<EventArgs> TypesChanged;
+        public event EventHandler<EventArgs>? TypesChanged;
 #pragma warning restore CS0067
 
         public ValueTask<IReadOnlyCollection<ITypeSystemMember>> CreateTypesAsync(

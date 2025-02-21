@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using System.Text;
 using HotChocolate.Configuration;
-using HotChocolate.Language;
 using HotChocolate.Types.Descriptors.Definitions;
 using HotChocolate.Utilities;
 
@@ -11,11 +9,19 @@ namespace HotChocolate.Types.Interceptors;
 
 internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
 {
-    public override void OnValidateType(
-        ITypeSystemObjectContext validationContext,
+    private const string _useDbContext = "UseDbContext";
+    private const string _usePaging = "UsePaging";
+    private const string _useProjection = "UseProjection";
+    private const string _useFiltering = "UseFiltering";
+    private const string _useSorting = "UseSorting";
+
+    private readonly HashSet<string> _names = [];
+
+    public override void OnAfterCompleteType(
+        ITypeCompletionContext completionContext,
         DefinitionBase definition)
     {
-        if (validationContext.DescriptorContext.Options.ValidatePipelineOrder &&
+        if (completionContext.DescriptorContext.Options.ValidatePipelineOrder &&
             definition is ObjectTypeDefinition objectTypeDef)
         {
             foreach (var field in objectTypeDef.Fields)
@@ -23,9 +29,8 @@ internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
                 if (field.MiddlewareDefinitions.Count > 1)
                 {
                     ValidatePipeline(
-                        validationContext.Type,
-                        new FieldCoordinate(validationContext.Type.Name, field.Name),
-                        field.SyntaxNode,
+                        completionContext.Type,
+                        new SchemaCoordinate(completionContext.Type.Name, field.Name),
                         field.MiddlewareDefinitions);
                 }
             }
@@ -34,15 +39,17 @@ internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
 
     private void ValidatePipeline(
         ITypeSystemObject type,
-        FieldCoordinate field,
-        ISyntaxNode? syntaxNode,
+        SchemaCoordinate fieldCoordinate,
         IList<FieldMiddlewareDefinition> middlewareDefinitions)
     {
+        _names.Clear();
+
         var usePaging = false;
         var useProjections = false;
         var useFiltering = false;
         var useSorting = false;
         var error = false;
+        HashSet<string>? duplicates = null;
 
         foreach (var definition in middlewareDefinitions)
         {
@@ -55,6 +62,11 @@ internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
                         {
                             error = true;
                         }
+
+                        if (!_names.Add(definition.Key))
+                        {
+                            (duplicates ??= []).Add(_useDbContext);
+                        }
                         break;
 
                     case WellKnownMiddleware.Paging:
@@ -63,6 +75,12 @@ internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
                             error = true;
                             break;
                         }
+
+                        if (!_names.Add(definition.Key))
+                        {
+                            (duplicates ??= []).Add(_usePaging);
+                        }
+
                         usePaging = true;
                         break;
 
@@ -72,32 +90,54 @@ internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
                             error = true;
                             break;
                         }
+
+                        if (!_names.Add(definition.Key))
+                        {
+                            (duplicates ??= []).Add(_useProjection);
+                        }
+
                         useProjections = true;
                         break;
 
                     case WellKnownMiddleware.Filtering:
+                        if (!_names.Add(definition.Key))
+                        {
+                            (duplicates ??= []).Add(_useFiltering);
+                        }
                         useFiltering = true;
                         break;
 
                     case WellKnownMiddleware.Sorting:
+                        if (!_names.Add(definition.Key))
+                        {
+                            (duplicates ??= []).Add(_useSorting);
+                        }
                         useSorting = true;
                         break;
                 }
             }
         }
 
+        if (duplicates?.Count > 0)
+        {
+            throw new SchemaException(
+                ErrorHelper.DuplicateDataMiddlewareDetected(
+                    fieldCoordinate,
+                    type,
+                    duplicates));
+        }
+
         if (error)
         {
             throw new SchemaException(
                 ErrorHelper.MiddlewareOrderInvalid(
-                    field,
+                    fieldCoordinate,
                     type,
-                    syntaxNode,
                     PrintPipeline(middlewareDefinitions)));
         }
     }
 
-    private string PrintPipeline(
+    private static string PrintPipeline(
         IList<FieldMiddlewareDefinition> middlewareDefinitions)
     {
         var sb = new StringBuilder();
@@ -113,31 +153,31 @@ internal sealed class MiddlewareValidationTypeInterceptor : TypeInterceptor
                     case WellKnownMiddleware.DbContext:
                         other = false;
                         PrintNext();
-                        sb.Append("UseDbContext");
+                        sb.Append(_useDbContext);
                         break;
 
                     case WellKnownMiddleware.Paging:
                         other = false;
                         PrintNext();
-                        sb.Append("UsePaging");
+                        sb.Append(_usePaging);
                         break;
 
                     case WellKnownMiddleware.Projection:
                         other = false;
                         PrintNext();
-                        sb.Append("UseProjection");
+                        sb.Append(_useProjection);
                         break;
 
                     case WellKnownMiddleware.Filtering:
                         other = false;
                         PrintNext();
-                        sb.Append("UseFiltering");
+                        sb.Append(_useFiltering);
                         break;
 
                     case WellKnownMiddleware.Sorting:
                         other = false;
                         PrintNext();
-                        sb.Append("UseSorting");
+                        sb.Append(_useSorting);
                         break;
 
                     default:

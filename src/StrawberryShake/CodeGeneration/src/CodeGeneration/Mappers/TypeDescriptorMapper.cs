@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using HotChocolate;
 using HotChocolate.Language;
 using HotChocolate.Types;
 using HotChocolate.Utilities;
@@ -238,7 +234,7 @@ public static partial class TypeDescriptorMapper
                     outputType.Implements.Single(),
                     kind);
 
-            return new[] { runtimeType.Name };
+            return new[] { runtimeType.Name, };
         }
 
         return outputType.Implements
@@ -265,7 +261,7 @@ public static partial class TypeDescriptorMapper
 
         if (kind == TypeKind.Result)
         {
-            string resultTypeName = CreateResultRootTypeName(outputType.Name);
+            var resultTypeName = CreateResultRootTypeName(outputType.Name);
             if (clientModel.OutputTypes.Any(t => t.Name.EqualsOrdinal(resultTypeName)))
             {
                 resultTypeName = CreateResultRootTypeName(outputType.Name, outputType.Type);
@@ -355,7 +351,6 @@ public static partial class TypeDescriptorMapper
                 parentRuntimeType));
     }
 
-
     private static void CollectClassesThatImplementInterface(
         OperationModel operation,
         OutputTypeModel outputType,
@@ -380,6 +375,12 @@ public static partial class TypeDescriptorMapper
         }
     }
 
+    private static bool IncludeOrSkipDirective(OutputFieldModel field)
+    {
+        return field.SyntaxNode.Directives.GetIncludeDirectiveNode() is not null ||
+            field.SyntaxNode.Directives.GetSkipDirectiveNode() is not null;
+    }
+
     private static void AddProperties(
         ClientModel model,
         Dictionary<string, TypeDescriptorModel> typeDescriptors,
@@ -393,6 +394,7 @@ public static partial class TypeDescriptorMapper
             {
                 INamedTypeDescriptor? fieldType;
                 var namedType = field.Type.NamedType();
+                var includeOrSkipDirective = IncludeOrSkipDirective(field);
 
                 if (namedType.IsScalarType() || namedType.IsEnumType())
                 {
@@ -407,14 +409,19 @@ public static partial class TypeDescriptorMapper
                         typeDescriptors);
                 }
 
+                var propertyKind = includeOrSkipDirective
+                    ? PropertyKind.SkipOrIncludeField
+                    : PropertyKind.Field;
                 properties.Add(
                     new PropertyDescriptor(
                         field.Name,
                         field.ResponseName,
                         BuildFieldType(
                             field.Type,
-                            fieldType),
-                        field.Description));
+                            fieldType,
+                            propertyKind),
+                        field.Description,
+                        propertyKind));
             }
 
             typeDescriptorModel.Descriptor.CompleteProperties(properties);
@@ -483,10 +490,18 @@ public static partial class TypeDescriptorMapper
 
     private static ITypeDescriptor BuildFieldType(
         this IType original,
-        INamedTypeDescriptor namedTypeDescriptor)
+        INamedTypeDescriptor namedTypeDescriptor,
+        PropertyKind kind = PropertyKind.Field)
     {
         if (original is NonNullType nnt)
         {
+            if (kind == PropertyKind.SkipOrIncludeField)
+            {
+                return BuildFieldType(
+                    nnt.Type,
+                    namedTypeDescriptor);
+            }
+
             return new NonNullTypeDescriptor(
                 BuildFieldType(
                     nnt.Type,
